@@ -11,6 +11,10 @@ library(processmapR)
 library(DiagrammeR)
 
 
+# Run data manipulation pipeline --------------------------------------------------------
+source(here::here("R", "data_manipulation.R"))
+
+
 # Load event log ------------------------------------------------------------------------
 t_event_log_app <- read.csv(here::here("Data", "t_event_log.csv"),
                             stringsAsFactors = FALSE) %>% 
