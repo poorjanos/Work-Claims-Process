@@ -23,7 +23,7 @@ t_casco_claims <- read_xlsx(here::here("Data", "FAIR_CASCO_Claims_2017-2018_EN.x
 t_casco_claims <- t_casco_claims %>%
   arrange(Claim_number, Claim_status_date) %>%
   group_by(Claim_number) %>%
-  mutate(previous_status_code = lag(Claim_status_code)) %>%
+  mutate(previous_status_code = lag(Claim_status_code, default = '999')) %>%
   ungroup() %>%
   filter(Claim_status_code != previous_status_code) %>%
   select(-previous_status_code)
