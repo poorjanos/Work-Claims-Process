@@ -31,6 +31,11 @@ t_event_log <- read.csv(here::here("Data", "t_event_log.csv"),
   )
 
 
+# Number of traces
+t_event_log %>%
+  number_of_traces()
+
+
 # Throughput time
 t_event_log %>%
   throughput_time(level = "log", units = "day") %>%
@@ -40,6 +45,7 @@ t_event_log %>%
 # Activity presence and frequency
 t_event_log %>% activity_presence() %>% # as of cases
   plot()
+
 
 t_event_log %>%
   activity_frequency("activity") %>% # as of activities
@@ -54,4 +60,21 @@ t_event_log %>%
 
 # Start activities
 t_event_log %>%
-  start_activities("activity")
+  start_activities("activity") %>% 
+
+
+# End activities
+t_event_log %>%
+  end_activities("activity") %>% 
+  plot()
+
+
+# Trace coverage
+t_event_log %>%
+  trace_coverage("trace") %>%
+  plot()
+
+
+# Trace length
+t_event_log %>%
+  trace_length()
