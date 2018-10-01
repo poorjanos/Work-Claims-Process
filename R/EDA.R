@@ -38,8 +38,11 @@ t_event_log %>%
 
 # Throughput time
 t_event_log %>%
-  throughput_time(level = "log", units = "day") %>%
+  throughput_time(level = "case", units = "day") %>%
   plot()
+
+  # Throughput time histogram
+  t_throughput_case <- t_event_log_cleaned %>% throughput_time(level = "case", units = "day")
 
 
 # Activity presence and frequency
@@ -60,7 +63,8 @@ t_event_log %>%
 
 # Start activities
 t_event_log %>%
-  start_activities("activity") %>% 
+  start_activities("activity") %>%
+  plot()
 
 
 # End activities
@@ -68,13 +72,17 @@ t_event_log %>%
   end_activities("activity") %>% 
   plot()
 
+  #Filter for specific end activity
+  t_event_log_cleaned <- t_event_log %>%
+    filter_endpoints(end_activities = "Closed", reverse = F)
+
 
 # Trace coverage
-t_event_log %>%
+t_event_log_cleaned %>%
   trace_coverage("trace") %>%
   plot()
 
 
 # Trace length
-t_event_log %>%
+t_event_log_cleaned %>%
   trace_length()
