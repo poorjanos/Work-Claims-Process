@@ -7,6 +7,7 @@ library(dplyr)
 library(lubridate)
 library(bupaR)
 library(edeaR)
+library(ggplot2)
 
 
 # Run data manipulation pipeline --------------------------------------------------------
@@ -30,7 +31,12 @@ t_event_log <- read.csv(here::here("Data", "t_event_log.csv"),
     resource_id = "Claim_adjuster_code"
   )
 
+#Filter for specific end activity
+t_event_log_cleaned <- t_event_log %>%
+  filter_endpoints(end_activities = "Closed", reverse = F)
 
+
+# Gen desriptive stats ------------------------------------------------------------------
 # Number of traces
 t_event_log %>%
   number_of_traces()
@@ -38,11 +44,14 @@ t_event_log %>%
 
 # Throughput time
 t_event_log %>%
-  throughput_time(level = "case", units = "day") %>%
+  throughput_time(level = "log", units = "day") %>%
   plot()
 
   # Throughput time histogram
   t_throughput_case <- t_event_log_cleaned %>% throughput_time(level = "case", units = "day")
+  ggplot(t_throughput_case, aes(x = throughput_time)) +
+    geom_histogram(bins = 30) +
+    theme_minimal()
 
 
 # Activity presence and frequency
@@ -72,10 +81,6 @@ t_event_log %>%
   end_activities("activity") %>% 
   plot()
 
-  #Filter for specific end activity
-  t_event_log_cleaned <- t_event_log %>%
-    filter_endpoints(end_activities = "Closed", reverse = F)
-
 
 # Trace coverage
 t_event_log_cleaned %>%
@@ -86,3 +91,44 @@ t_event_log_cleaned %>%
 # Trace length
 t_event_log_cleaned %>%
   trace_length()
+
+
+# Categorical analysis ------------------------------------------------------------------
+
+# Breakdown by happy flow
+t_event_log_cleaned %>% 
+  group_by(Pending) %>% 
+  trace_length()
+
+t_event_log_cleaned %>% 
+  group_by(Pending) %>% 
+  throughput_time(level = "log", units = "day") %>%
+  plot()
+
+# Breakdown by month of case start
+t_event_log_cleaned %>% 
+  group_by(Case_start_month) %>% 
+  trace_length() %>% 
+  plot()
+
+t_event_log_cleaned %>% 
+  group_by(Case_start_month) %>% 
+  throughput_time(level = "log", units = "day") %>%
+  plot()
+
+  # Box plot for month
+  t_month_throughput <- t_event_log_cleaned %>% 
+    filter(!Case_start_month %in% c("2018/06", "2018/07", "2018/08", "2018/09")) %>% 
+    group_by(Case_start_month) %>% 
+    throughput_time(level = "case", units = "day") %>%
+    ungroup()
+  
+  ggplot(t_month_throughput, aes(x = Case_start_month, y = throughput_time)) +
+    geom_boxplot() + 
+    coord_cartesian(ylim = c(0, 120)) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 90))
+  
+  
+  
+  

@@ -12,6 +12,7 @@ library(lubridate)
 library(bupaR)
 library(processmapR)
 library(processmonitR)
+library(stringr)
 
 
 # Load raw data -------------------------------------------------------------------------
@@ -35,6 +36,27 @@ t_casco_claims <- t_casco_claims %>%
   group_by(Claim_number) %>% 
   mutate(Payment_sum_max = max(Payment_sum)) %>% 
   ungroup()
+
+
+# Add flag for cases pending (excluding pending for 3 months)
+t_casco_claims <- t_casco_claims %>%
+  group_by(Claim_number) %>% 
+  mutate(helper = case_when(stringr::str_detect(stringr::str_to_lower(Claim_status_EN), "pending") & 
+                              Claim_status_EN != "Pending for 3 months" ~ 1,
+                          TRUE ~ 0
+                          )) %>%
+  mutate(Pending = max(helper)) %>% 
+  ungroup() %>% 
+  select(-helper)
+
+
+# Add month date of first event as categ var
+t_casco_claims <- t_casco_claims %>%
+  group_by(Claim_number) %>% 
+  mutate(Case_start_date = as.character(min(lubridate::floor_date(Claim_status_date, unit = "month")))) %>% 
+  ungroup() %>% 
+  mutate(Case_start_month = paste0(substr(Case_start_date, 1, 4), "/", substr((Case_start_date), 6, 7))) %>% 
+  select(-Case_start_date)
 
 
 # Add event-log specific fields required by bupaR ---------------------------------------
