@@ -40,6 +40,12 @@ jdbcConnection <-
 query_claims_process <- "select distinct * from T_CLAIMS_PA_OUTPUT"
 t_claims_pa <- dbGetQuery(jdbcConnection, query_claims_process)
 
+query_claims_process_fair <- "select distinct * from T_CLAIMS_PA_OUTPUT where ACTIVITY_TYPE =  'FAIRKAR'"
+t_claims_pa_fair <- dbGetQuery(jdbcConnection, query_claims_process_fair)
+
+query_claims_process_kontakt <- "select distinct * from T_CLAIMS_PA_OUTPUT where ACTIVITY_TYPE =  'KONTAKT'"
+t_claims_pa_kontakt <- dbGetQuery(jdbcConnection, query_claims_process_kontakt)
+
 # Close db connection: kontakt
 dbDisconnect(jdbcConnection)
 
@@ -68,5 +74,7 @@ create_export <- function(df, suffix = "") {
 
 # Export
 create_export(t_claims_pa)
+create_export(t_claims_pa_fair, suffix = 'fairkar')
+create_export(t_claims_pa_kontakt, suffix = 'kontakt')
 
 
