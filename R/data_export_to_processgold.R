@@ -37,14 +37,17 @@ jdbcConnection <-
   )
 
 # Fetch data
-query_claims_process <- "select distinct * from T_CLAIMS_PA_OUTPUT"
+query_claims_process <- "select distinct * from T_CLAIMS_PA_OUTPUT_CCC_OKK"
 t_claims_pa <- dbGetQuery(jdbcConnection, query_claims_process)
 
-query_claims_process_fair <- "select distinct * from T_CLAIMS_PA_OUTPUT where ACTIVITY_TYPE =  'FAIRKAR'"
+query_claims_process_fair <- "select distinct * from T_CLAIMS_PA_OUTPUT_CCC_OKK where ACTIVITY_TYPE =  'FAIRKAR'"
 t_claims_pa_fair <- dbGetQuery(jdbcConnection, query_claims_process_fair)
 
-query_claims_process_kontakt <- "select distinct * from T_CLAIMS_PA_OUTPUT where ACTIVITY_TYPE =  'KONTAKT'"
-t_claims_pa_kontakt <- dbGetQuery(jdbcConnection, query_claims_process_kontakt)
+query_claims_process_kontaktokk <- "select distinct * from T_CLAIMS_PA_OUTPUT_CCC_OKK where ACTIVITY_TYPE =  'KONTAKT OKK'"
+t_claims_pa_kontaktokk <- dbGetQuery(jdbcConnection, query_claims_process_kontaktokk)
+
+query_claims_process_kontaktccc <- "select distinct * from T_CLAIMS_PA_OUTPUT_CCC_OKK where ACTIVITY_TYPE =  'KONTAKT OKK'"
+t_claims_pa_kontaktccc <- dbGetQuery(jdbcConnection, query_claims_process_kontaktccc)
 
 # Close db connection: kontakt
 dbDisconnect(jdbcConnection)
@@ -59,11 +62,12 @@ names(t_claims_pa)
 create_export <- function(df, suffix = "") {
   # Select cols
   df_export <- df %>%
-    select(CASE_ID, EVENT_END, ACTIVITY_EN, ACTIVITY_TYPE, CASE_TYPE, USER_ID) %>%
+    select(CASE_ID, EVENT_END, ACTIVITY_EN, ACTIVITY_TYPE, ACTIVITY_CHANNEL, CASE_TYPE, USER_ID) %>%
     arrange(CASE_ID, EVENT_END)
 
   # Change colnames to names to fit PG
-  names(df_export) <- c("Case ID", "Event end", "Activity", "Activity type", "Case type", "User")
+  names(df_export) <- c("Case ID", "Event end", "Activity",
+                        "Activity type", "Activity channel","Case type", "User")
 
   # Save
   write.table(df_export,
@@ -75,6 +79,7 @@ create_export <- function(df, suffix = "") {
 # Export
 create_export(t_claims_pa)
 create_export(t_claims_pa_fair, suffix = 'fairkar')
-create_export(t_claims_pa_kontakt, suffix = 'kontakt')
+create_export(t_claims_pa_kontaktokk, suffix = 'kontaktokk')
+create_export(t_claims_pa_kontaktccc, suffix = 'kontaktccc')
 
 
