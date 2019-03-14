@@ -1,4 +1,7 @@
-/* Gen Casco claims table with FAIRKAR, CCC KONTAKT and OKK KONTAKT activities*/
+/*********************************************************************************************************/
+/* Gen Casco claims table with FAIRKAR, CCC KONTAKT and OKK KONTAKT activities ***************************/
+/*********************************************************************************************************/
+
 DROP TABLE T_CLAIMS_PA_OUTPUT_CCC_OKK;
 COMMIT;
 
@@ -70,8 +73,82 @@ AS
 
 COMMIT;
 
+CREATE INDEX claims_ccc_okk
+   ON T_CLAIMS_PA_OUTPUT_CCC_OKK (case_id);
+
+
+/* Drop cases with no activities*/
 
 DELETE FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK
       WHERE   activity_type IS NULL;
+
+COMMIT;
+
+
+
+/*********************************************************************************************************/
+/* Compute case milestones *******************************************************************************/
+/*********************************************************************************************************/
+
+/* Compute case milestones */
+DROP TABLE T_CLAIMS_MILESTONES;
+COMMIT;
+
+CREATE TABLE T_CLAIMS_MILESTONES
+AS
+     SELECT   case_id, case_type, MIN (event_end) AS claim_report_date
+       FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK
+      WHERE   activity_hu = 'FKR 01 Elozetesen bejelentett '
+   GROUP BY   case_id, case_type;
+
+COMMIT;
+
+CREATE INDEX milestones
+   ON T_CLAIMS_MILESTONES (case_id);
+
+ALTER TABLE T_CLAIMS_MILESTONES
+ADD
+(
+claim_decision_date date, -- 49, 47, 25
+claim_close_date date -- 22 30 06
+);
+COMMIT;
+
+
+/* Add close date */
+UPDATE   T_CLAIMS_MILESTONES a
+   SET   claim_close_date =
+            (SELECT   MAX (event_end)
+               FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK b
+              WHERE   activity_hu IN
+                            ('FKR 22 Kifizetes utan lezarhato ',
+                             'FKR 30 Harom honapig fuggo ',
+                             'FKR 06 Lezart ')
+                      AND a.case_id = b.case_id);
+
+
+/* Add date date of review or put to pending state*/
+UPDATE   T_CLAIMS_MILESTONES a
+   SET   claim_decision_date =
+            (SELECT   MIN (event_end)
+               FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK b
+              WHERE   activity_hu IN
+                            ('FKR 49 Velemenyezett es kifizetheto ',
+                             'FKR 46 Velemenyezett es fuggo ',
+                             'FKR 25 Fuggo ')
+                      AND a.case_id = b.case_id);
+
+COMMIT;
+
+
+/* Delete cases with improper start or end */
+DELETE FROM   T_CLAIMS_MILESTONES
+      WHERE   claim_report_date IS NULL OR claim_close_date IS NULL;
+COMMIT;
+
+/* Delete cases with improper event order */
+DELETE FROM   T_CLAIMS_MILESTONES
+      WHERE   claim_decision_date > claim_close_date
+              OR claim_report_date > claim_close_date;
 
 COMMIT;
