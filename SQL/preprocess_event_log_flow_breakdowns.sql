@@ -152,3 +152,133 @@ DELETE FROM   T_CLAIMS_MILESTONES
               OR claim_report_date > claim_close_date;
 
 COMMIT;
+
+
+
+/* Create clean 3 stages table */
+DROP TABLE T_CLAIMS_MILESTONES_3STAGES;
+
+CREATE TABLE T_CLAIMS_MILESTONES_3STAGES
+AS
+   SELECT   case_id, case_type, '3STAGES' as milestones,
+            TRUNC (claim_report_date) + 1 / (24 * 60 * 60)
+               AS report_lowerbound,
+            TRUNC (claim_report_date + 1) - 1 / (24 * 60 * 60)
+               AS report_upperbound,
+            TRUNC (claim_decision_date) + 1 / (24 * 60 * 60)
+               AS decision_lowerbound,
+            TRUNC (claim_decision_date + 1) - 1 / (24 * 60 * 60)
+               AS decision_upperbound,
+            TRUNC (claim_close_date) + 1 / (24 * 60 * 60) AS close_lowerbound,
+            TRUNC (claim_close_date + 1) - 1 / (24 * 60 * 60)
+               AS close_upperbound
+     FROM   T_CLAIMS_MILESTONES
+    WHERE       claim_report_date IS NOT NULL
+            AND claim_decision_date IS NOT NULL
+            AND claim_close_date IS NOT NULL;
+
+
+DELETE FROM T_CLAIMS_MILESTONES_3STAGES
+where report_lowerbound = decision_lowerbound
+or  decision_lowerbound = close_lowerbound;
+COMMIT;
+
+
+/* Create clean 2 stages table */
+DROP TABLE T_CLAIMS_MILESTONES_2STAGES;
+
+CREATE TABLE T_CLAIMS_MILESTONES_2STAGES
+AS
+   SELECT   case_id,
+            case_type,
+            '2STAGES' AS milestones,
+            report_lowerbound,
+            report_upperbound,
+            decision_lowerbound,
+            decision_upperbound,
+            close_lowerbound,
+            close_upperbound
+     FROM   (SELECT   case_id,
+                      case_type,
+                      TRUNC (claim_report_date) + 1 / (24 * 60 * 60)
+                         AS report_lowerbound,
+                      TRUNC (claim_report_date + 1) - 1 / (24 * 60 * 60)
+                         AS report_upperbound,
+                      TRUNC (claim_decision_date) + 1 / (24 * 60 * 60)
+                         AS decision_lowerbound,
+                      TRUNC (claim_decision_date + 1) - 1 / (24 * 60 * 60)
+                         AS decision_upperbound,
+                      TRUNC (claim_close_date) + 1 / (24 * 60 * 60)
+                         AS close_lowerbound,
+                      TRUNC (claim_close_date + 1) - 1 / (24 * 60 * 60)
+                         AS close_upperbound
+               FROM   T_CLAIMS_MILESTONES
+              WHERE       claim_report_date IS NOT NULL
+                      AND claim_decision_date IS NOT NULL
+                      AND claim_close_date IS NOT NULL)
+    WHERE   report_lowerbound = decision_lowerbound
+            OR decision_lowerbound = close_lowerbound
+   UNION
+   SELECT   case_id,
+            case_type,
+            '2STAGES' AS milestones,
+            TRUNC (claim_report_date) + 1 / (24 * 60 * 60)
+               AS report_lowerbound,
+            TRUNC (claim_report_date + 1) - 1 / (24 * 60 * 60)
+               AS report_upperbound,
+            TRUNC (claim_decision_date) + 1 / (24 * 60 * 60)
+               AS decision_lowerbound,
+            TRUNC (claim_decision_date + 1) - 1 / (24 * 60 * 60)
+               AS decision_upperbound,
+            TRUNC (claim_close_date) + 1 / (24 * 60 * 60) AS close_lowerbound,
+            TRUNC (claim_close_date + 1) - 1 / (24 * 60 * 60)
+               AS close_upperbound
+     FROM   T_CLAIMS_MILESTONES
+    WHERE       claim_report_date IS NOT NULL
+            AND claim_decision_date IS NULL
+            AND claim_close_date IS NOT NULL;
+            
+DELETE FROM T_CLAIMS_MILESTONES_2STAGES
+where report_lowerbound =  close_lowerbound;
+            
+
+UPDATE   T_CLAIMS_MILESTONES_2STAGES
+   SET   decision_lowerbound = NULL
+ WHERE   decision_lowerbound IS NOT NULL;
+
+UPDATE   T_CLAIMS_MILESTONES_2STAGES
+   SET   decision_upperbound = NULL
+ WHERE   decision_upperbound IS NOT NULL;
+
+COMMIT;
+
+
+/* Merge stages and create cleaned output */
+DROP TABLE T_CLAIMS_MILESTONES_CLEANED;
+COMMIT;
+
+CREATE TABLE T_CLAIMS_MILESTONES_CLEANED
+AS
+   SELECT   * FROM T_CLAIMS_MILESTONES_3STAGES
+   UNION
+   SELECT   * FROM T_CLAIMS_MILESTONES_2STAGES;
+
+COMMIT;
+
+
+CREATE INDEX milestones_c
+   ON T_CLAIMS_MILESTONES_CLEANED (case_id);
+
+/* Add milestone flag to event sequence */
+ALTER TABLE T_CLAIMS_PA_OUTPUT_CCC_OKK
+ADD
+(milestones varchar2 (10));
+COMMIT;
+
+UPDATE   T_CLAIMS_PA_OUTPUT_CCC_OKK a
+   SET   milestones =
+            (SELECT   milestones
+               FROM   t_claims_milestones_cleaned b
+              WHERE   a.case_id = b.case_id);
+
+COMMIT;

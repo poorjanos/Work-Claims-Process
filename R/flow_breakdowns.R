@@ -38,27 +38,12 @@ jdbcConnection <-
   )
 
 # Fetch data
-query_cutpoints <- "SELECT   case_id,
-TRUNC (claim_report_date) + 1 / (24 * 60 * 60) AS report_lowerbound,
-TRUNC (claim_report_date + 1) - 1 / (24 * 60 * 60)
-AS report_upperbound,
-TRUNC (claim_decision_date) + 1 / (24 * 60 * 60)
-AS decision_lowerbound,
-TRUNC (claim_decision_date + 1) - 1 / (24 * 60 * 60)
-AS decision_upperbound,
-TRUNC (claim_close_date) + 1 / (24 * 60 * 60) AS close_lowerbound,
-TRUNC (claim_close_date + 1) - 1 / (24 * 60 * 60)
-AS close_upperbound
-FROM   T_CLAIMS_MILESTONES
-WHERE   claim_report_date is not null and claim_decision_date is not null
-AND claim_close_date is not null"
+query_cutpoints <- "SELECT * FROM T_CLAIMS_MILESTONES_CLEANED"
 t_cutpoints <- dbGetQuery(jdbcConnection, query_cutpoints)
 
-query_eventlog <- "SELECT   *
-  FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK a
- WHERE   exists (select 1  FROM T_CLAIMS_MILESTONES b
-WHERE   claim_report_date is not null and claim_decision_date is not null
-AND claim_close_date is not null and a.case_id = b.case_id)"
+query_eventlog <-
+"SELECT * FROM T_CLAIMS_PA_OUTPUT_CCC_OKK a WHERE milestones IS NOT NULL
+AND EXISTS (SELECT 1 FROM T_CLAIMS_MILESTONES_CLEANED b WHERE a.case_id = b.case_id)"
 t_eventlog <- dbGetQuery(jdbcConnection, query_eventlog)
 
 
@@ -69,16 +54,20 @@ dbDisconnect(jdbcConnection)
 
 # Data Transformation ###################################################################
 
-t_cutpoints_long <- t_cutpoints %>% mutate_at(vars(REPORT_LOWERBOUND:CLOSE_UPPERBOUND), ymd_hms) %>% 
-                  tidyr::gather(-CASE_ID, key = CUTPOINT, value = CUTDATE)
+t_cutpoints_long <- t_cutpoints %>%
+  mutate_at(vars(REPORT_LOWERBOUND:CLOSE_UPPERBOUND), ymd_hms) %>%
+  tidyr::gather(-CASE_ID, -CASE_TYPE, -MILESTONES, key = CUTPOINT, value = CUTDATE) %>%
+  arrange(CASE_ID, CUTPOINT) %>% 
+  filter(!is.na(CUTDATE))
+
 t_eventlog <- t_eventlog %>% mutate_at(vars(EVENT_END), ymd_hms)
 
-t_events_ccc <- t_eventlog %>% filter(ACTIVITY_TYPE == "KONTAKT CCC") %>% select(CASE_ID, CASE_TYPE, EVENT_END)
+# Org specific event seqs
+t_events_ccc <- t_eventlog %>%
+  filter(ACTIVITY_TYPE == "KONTAKT CCC" & ACTIVITY_CHANNEL == "CALL") %>%
+  select(CASE_ID, CASE_TYPE, MILESTONES, EVENT_END)
 
-
-
-
-# Compute Bins ##########################################################################
+# Define Func to Compute Bins
 create_bins <- function(df, case_id) {
   t_cutpoints_long_filtered <- t_cutpoints_long[t_cutpoints_long$CASE_ID == case_id, ]
   as.character(cut(df$EVENT_END,
@@ -87,8 +76,50 @@ create_bins <- function(df, case_id) {
   ))
 }
 
-by_case_id <- t_events_ccc %>% group_by(CASE_ID, CASE_TYPE) %>% nest() %>% 
-  mutate(BINS = map(data, create_bins, .$CASE_ID))
+
+# Analyse 3 stage seqs ##################################################################
+by_case_id_3stages <- t_events_ccc %>%
+  filter(MILESTONES == '3STAGES') %>% 
+  select(-MILESTONES) %>% 
+  group_by(CASE_ID, CASE_TYPE) %>%
+  nest() %>%
+  mutate(BINS = map2(data, .$CASE_ID, ~create_bins(df = .x, case_id = .y)))
+
+t_3stages <- by_case_id_3stages %>% select(CASE_ID, CASE_TYPE, BINS) %>% unnest() %>% 
+  mutate(PERIOD = case_when(
+    is.na(BINS) ~ '1_BEFORE_REPORT',
+    BINS == 'REPORT_LOWERBOUND' ~ '2_ON_REPORT',
+    BINS == 'REPORT_UPPERBOUND' ~ '3_REPORT_DECISION',
+    BINS == 'DECISION_LOWERBOUND' ~ '4_ON_DECISION',
+    BINS == 'DECISION_UPPERBOUND' ~ '5_DECISION_CLOSE',
+    BINS == 'CLOSE_LOWERBOUND' ~ '6_ON_CLOSE',
+    BINS == 'CLOSE_UPPERBOUND' ~ '7_AFTER_CLOSE'
+  )) %>% 
+  group_by(PERIOD, CASE_TYPE) %>% 
+  summarize(N_OF_CALLS = n()) %>% 
+  tidyr::spread(key = CASE_TYPE, value = N_OF_CALLS)
 
 
-by_case_id %>% select(CASE_ID, CASE_TYPE, BINS) %>% unnest()
+
+# Analyse 2 stage seqs ##################################################################
+by_case_id_2stages <- t_events_ccc %>%
+  filter(MILESTONES == '2STAGES') %>% 
+  select(-MILESTONES) %>% 
+  group_by(CASE_ID, CASE_TYPE) %>%
+  nest() %>%
+  mutate(BINS = map2(data, .$CASE_ID, ~create_bins(df = .x, case_id = .y)))
+
+t_2stages <- by_case_id_2stages %>% select(CASE_ID, CASE_TYPE, BINS) %>% unnest() %>% 
+  mutate(PERIOD = case_when(
+    is.na(BINS) ~ '1_BEFORE_REPORT',
+    BINS == 'REPORT_LOWERBOUND' ~ '2_ON_REPORT',
+    BINS == 'REPORT_UPPERBOUND' ~ '3_REPORT_CLOSE',
+    BINS == 'CLOSE_LOWERBOUND' ~ '4_ON_CLOSE',
+    BINS == 'CLOSE_UPPERBOUND' ~ '5_AFTER_CLOSE'
+  )) %>% 
+  group_by(PERIOD, CASE_TYPE) %>% 
+  summarize(N_OF_CALLS = n()) %>% 
+  tidyr::spread(key = CASE_TYPE, value = N_OF_CALLS)
+
+
+
