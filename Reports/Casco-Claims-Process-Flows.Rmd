@@ -1,0 +1,205 @@
+---
+title: "Casco Claims: Branches and Interactions"
+output:
+  html_document:
+    theme: cosmo
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Housekeeping
+
+### R Source Code Available Here:
+
+https://github.com/poorjanos/Work-Claims-Process
+
+
+### R Session Info
+```{r}
+sessionInfo()
+```
+
+
+### Load libs
+```{r, message = FALSE, echo = TRUE}
+library(config)
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(lubridate)
+library(gridExtra)
+```
+
+### Load and Transform Data
+```{r, include=FALSE}
+# Data Extraction #######################################################################
+
+# Set JAVA_HOME, set max. memory, and load rJava library
+Sys.setenv(JAVA_HOME = "C:\\Program Files\\Java\\jre1.8.0_171")
+options(java.parameters = "-Xmx2g")
+library(rJava)
+
+# Output Java version
+.jinit()
+print(.jcall("java/lang/System", "S", "getProperty", "java.version"))
+
+# Load RJDBC library
+library(RJDBC)
+
+# Get credentials
+datamnr <-
+  config::get("datamnr", file = "C:\\Users\\PoorJ\\Projects\\config.yml")
+
+# Create connection driver
+jdbcDriver <-
+  JDBC(driverClass = "oracle.jdbc.OracleDriver", classPath = "C:\\Users\\PoorJ\\Desktop\\ojdbc7.jar")
+
+# Open connection: kontakt
+jdbcConnection <-
+  dbConnect(
+    jdbcDriver,
+    url = datamnr$server,
+    user = datamnr$uid,
+    password = datamnr$pwd
+  )
+
+# Fetch data
+query_branches <- "SELECT * FROM T_CLAIMS_MILESTONES"
+t_branches <- dbGetQuery(jdbcConnection, query_branches)
+
+query_cutpoints <- "SELECT * FROM T_CLAIMS_MILESTONES_CLEANED"
+t_cutpoints <- dbGetQuery(jdbcConnection, query_cutpoints)
+
+query_eventlog <-
+"SELECT * FROM T_CLAIMS_PA_OUTPUT_CCC_OKK a WHERE milestones IS NOT NULL
+AND EXISTS (SELECT 1 FROM T_CLAIMS_MILESTONES_CLEANED b WHERE a.case_id = b.case_id)"
+t_eventlog <- dbGetQuery(jdbcConnection, query_eventlog)
+
+
+# Close db connection: kontakt
+dbDisconnect(jdbcConnection)
+
+
+# Transform data
+t_cutpoints_long <- t_cutpoints %>%
+  mutate_at(vars(REPORT_LOWERBOUND:CLOSE_UPPERBOUND), ymd_hms) %>%
+  tidyr::gather(-CASE_ID, -CASE_TYPE, -MILESTONES, key = CUTPOINT, value = CUTDATE) %>%
+  arrange(CASE_ID, CUTPOINT) %>% 
+  filter(!is.na(CUTDATE))
+
+t_eventlog <- t_eventlog %>% mutate_at(vars(EVENT_END), ymd_hms)
+
+t_branches <- t_branches %>% mutate_at(vars(CLAIM_REPORT_DATE, CLAIM_DECISION_DATE, CLAIM_CLOSE_DATE), ymd_hms)
+```
+
+
+# Overview of Casco Claims
+
+### Monthly Volume of Reported Casco Claims
+
+Dataset contains 12K reported and closed Casco claims that arrived between 2017/01 and 2018/06. Monthly fluctuation reflects seasonal peaks in summer months.
+
+```{r, message=FALSE}
+p1 <- t_branches %>%
+  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+  group_by(CLAIM_REPORT_MONTH) %>%
+  summarize(COUNT_REPORTED_CLAIMS = n()) %>%
+  ungroup() %>%
+  ggplot(aes(x = CLAIM_REPORT_MONTH, y = COUNT_REPORTED_CLAIMS)) +
+  geom_line() +
+  labs(
+    x = "Month",
+    y = "# of Reported Casco Claims",
+    title = "Number of Reported Casco Claims per Month)"
+  )
+
+p2 <- t_branches %>%
+  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(
+    CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month"),
+    THROUGHPUT_TIME = difftime(CLAIM_CLOSE_DATE, CLAIM_REPORT_DATE, units = "days")
+  ) %>%
+  group_by(CLAIM_REPORT_MONTH) %>%
+  summarize(AVG_THROUGHPUT = mean(THROUGHPUT_TIME)) %>%
+  ungroup() %>%
+  ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_THROUGHPUT)) +
+  geom_line() +
+  labs(
+    x = "Month",
+    y = "Throughput Time (days)",
+    title = "Throughput Time Reported Casco Claims per Month"
+  )
+
+grid.arrange(p1, p2, nrow = 2)
+```
+
+### Process Flow Breakdown
+```{r, message=FALSE}
+p3 <- t_branches %>%
+  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+  group_by(CLAIM_REPORT_MONTH, CASE_TYPE) %>%
+  summarize(COUNT_REPORTED_CLAIMS = n()) %>%
+  ungroup() %>%
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('ALTERNATIVE','STANDARD','EXCEPTION'))) %>% 
+  ggplot(aes(x = CLAIM_REPORT_MONTH, y = COUNT_REPORTED_CLAIMS)) +
+  geom_line() +
+  facet_wrap(~ CASE_TYPE) +
+  labs(
+    x = "Month",
+    y = "# of Reported Casco Claims",
+    title = "Number of Reported Casco Claims per Month"
+  )
+
+p4 <- t_branches %>%
+  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(
+    CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month"),
+    THROUGHPUT_TIME = difftime(CLAIM_CLOSE_DATE, CLAIM_REPORT_DATE, units = "days")
+  ) %>%
+  group_by(CLAIM_REPORT_MONTH, CASE_TYPE) %>%
+  summarize(AVG_THROUGHPUT = mean(THROUGHPUT_TIME)) %>%
+  ungroup() %>%
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('ALTERNATIVE','STANDARD','EXCEPTION'))) %>% 
+  ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_THROUGHPUT)) +
+  geom_line() +
+  facet_wrap(~ CASE_TYPE) +
+  labs(
+    x = "Month",
+    y = "Throughput Time (days)",
+    title = "Throughput Time Reported Casco Claims per Month"
+  )
+
+grid.arrange(p3, p4, nrow = 2)
+```
+
+# Interactions
+```{r, message=FALSE}
+# Compute interactions per case
+t_interaction_counts <- t_eventlog %>%
+  group_by(CASE_ID, ACTIVITY_TYPE) %>%
+  summarize(COUNT_OF_ACTIVITY = n()) %>%
+  ungroup() %>%
+  tidyr::spread(key = ACTIVITY_TYPE, value = COUNT_OF_ACTIVITY)
+
+names(t_interaction_counts) <- c("CASE_ID", "FAIRKAR", "KONTAKT_CCC", "KONTAKT_OKK")
+
+# Add interactions to base table
+t_branches %>%
+  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+  left_join(t_interaction_counts, by = c("CASE_ID")) %>%
+  group_by(CLAIM_REPORT_MONTH) %>%
+  summarize(
+    COUNT_REPORTED_CLAIMS = n(),
+    TOTAL_CCC = sum(KONTAKT_CCC, na.rm = TRUE),
+    TOTAL_OKK = sum(KONTAKT_OKK, na.rm = TRUE),
+    AVG_CCC = mean(KONTAKT_CCC, na.rm = TRUE),
+    AVG_OKK = mean(KONTAKT_OKK, na.rm = TRUE)
+  ) %>%
+  ungroup()
+```
