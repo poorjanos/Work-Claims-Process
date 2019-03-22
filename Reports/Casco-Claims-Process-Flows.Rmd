@@ -1,7 +1,7 @@
 ---
 title: "Casco Claims: Branches and Interactions"
 author: "János Poór"
-date: 'March 21, 2019'
+date: 'March 22, 2019'
 output: rmdformats::readthedown
 ---
 
@@ -77,6 +77,24 @@ t_eventlog <- t_eventlog %>% mutate_at(vars(EVENT_END), ymd_hms)
 t_branches <- t_branches %>% mutate_at(vars(CLAIM_REPORT_DATE, CLAIM_DECISION_DATE, CLAIM_CLOSE_DATE), ymd_hms)
 ```
 
+# TL;DR
+
+Outline of the main conclusions of the analysis of Casco claims process branches and interactions:  
+
+* Process branches  
+	+ Proportion of alternative (STP) claim management is minimal
+	+ Proporiton of standard (happyflow) and exception (pending) flow is about 50-50%
+* Interactions  
+	+ Contact Center: less than 50% of cases have Contact Center interactions
+	+ Those cases that have Contact Center interactions have on average 5
+	+ Claims Handling: all cases have Claims handling interactions with an average of 17
+	+ Exception flow has most interactions
+* Lifecycles  
+	+ Most interactions happen between report date and closing date of claim irrespective of process branch
+	+ 30% of calls happen in exception flow between report date and closing date of claim
+	+ 50% of Claim Handling interactions between report date and closing date of claim
+	
+***	
 
 # Overview of Casco Claims
 
@@ -275,7 +293,7 @@ t_branches %>%
 
 
 
-# Analysis Claims Lifecycle
+# Analysis of Claims Lifecycle
 
 Claim file lifecycle can be computed from Fairkar status data. The two major lifecycle cutpoints are:  
 
