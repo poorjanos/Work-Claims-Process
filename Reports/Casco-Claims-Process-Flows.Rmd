@@ -473,6 +473,31 @@ by_case_id_ccc %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
 ```
 
 
+### Distribution of Calls between Report and Close Dates
+
+```{r, message=FALSE}
+t_cutpoints %>%
+  select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
+  mutate(
+    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
+    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
+  ) %>%
+  inner_join(t_events_ccc, by = "CASE_ID") %>%
+  filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
+  mutate(
+    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
+    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
+  ) %>%
+  group_by(CALL_DIFF_CAT, THROUGHPUT_TIME_CAT) %>%
+  summarize(NUM_OF_CALLS = n()) %>%
+  ungroup() %>%
+  ggplot(aes(x = CALL_DIFF_CAT, y = NUM_OF_CALLS, group = 1)) +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 90, size = 6)) +
+  facet_grid(. ~ THROUGHPUT_TIME_CAT)
+```
+
+
 ## Claims Handling
 
 ### Claims Handling Interactions across Claims Lifecycle
