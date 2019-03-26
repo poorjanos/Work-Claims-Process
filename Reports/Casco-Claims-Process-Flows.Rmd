@@ -19,6 +19,7 @@ library(lubridate)
 library(gridExtra)
 library(tidyr)
 library(scales)
+library(stringr)
 ```
 
 
@@ -287,6 +288,66 @@ t_branches %>%
       y = "# of Interactions per Claim File",
       title = "Number of Average Interactions per Claim File"
     )
+```
+
+
+## Breakdown of Claims Handling Interactions by Department
+
+```{r, message=FALSE}
+# Compute interactions per case
+t_interaction_counts_claimsdept <- t_eventlog %>%
+  filter(ACTIVITY_TYPE == "KONTAKT OKK") %>% 
+  mutate(DEPT = stringr::str_extract(USER_ID, '[^OKK/].*?(?=\\\\)')) %>%
+  mutate(DEPT = case_when(DEPT == "Gepjarmu/szakertok" ~ "Car/Experts",
+                          DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics/Mailroom",
+                          TRUE ~ "Other")) %>% 
+  group_by(CASE_ID, DEPT) %>%
+  summarize(COUNT_OF_ACTIVITY = n()) %>%
+  ungroup()
+
+# Add interactions to base table
+t_branches %>%
+  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+  select(CASE_ID, CLAIM_REPORT_MONTH) %>% 
+  left_join(t_interaction_counts_claimsdept, by = c("CASE_ID")) %>% 
+  filter(!is.na(DEPT)) %>% 
+  group_by(CLAIM_REPORT_MONTH, DEPT) %>% 
+  summarize(AVG_INT = mean(COUNT_OF_ACTIVITY, na.rm = TRUE)) %>% 
+  ungroup() %>%
+  ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_INT, group = DEPT, color = DEPT)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    x = "Month",
+    y = "# of Interactions per Claim File",
+    title = "Number of Average Interactions per Claim File\nby Claims Handling Department"
+  )
+```
+
+
+## Breakdown of Claims Handling Interactions by Department by Process Branch
+
+```{r, message=FALSE}
+# Add interactions to base table
+t_branches %>%
+  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+  select(CASE_ID, CLAIM_REPORT_MONTH, CASE_TYPE) %>% 
+  left_join(t_interaction_counts_claimsdept, by = c("CASE_ID")) %>% 
+  filter(!is.na(DEPT)) %>% 
+  group_by(CLAIM_REPORT_MONTH, DEPT, CASE_TYPE) %>% 
+  summarize(AVG_INT = mean(COUNT_OF_ACTIVITY, na.rm = TRUE)) %>% 
+  ungroup() %>%
+  ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_INT, group = DEPT, color = DEPT)) +
+  geom_line() +
+  geom_point() +
+  facet_grid(.~CASE_TYPE) +
+  labs(
+    x = "Month",
+    y = "# of Interactions per Claim File",
+    title = "Number of Average Interactions per Claim File\nby Claims Handling Department"
+  )
 ```
 
 ***
