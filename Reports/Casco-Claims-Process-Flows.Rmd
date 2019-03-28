@@ -475,6 +475,41 @@ by_case_id_ccc %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
 
 ### Distribution of Calls between Report and Close Dates
 
+Most calls are received between report and closing date. Breaking down this period by days passed after report shows that most calls are received either right after report (between 0-5 days) or after 3 months (greater than 100 days).
+
+```{r, message=FALSE}
+t_calls_ccc <- t_eventlog %>%
+  filter(
+    CASE_ID %in% t_cutpoints_long$CASE_ID &
+      ACTIVITY_TYPE == "KONTAKT CCC" &
+      ACTIVITY_CHANNEL == "CALL"
+  ) %>%
+  select(CASE_ID, CASE_TYPE, MILESTONES, ACTIVITY_EN, EVENT_END)
+
+
+t_cutpoints %>%
+  select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
+  mutate(
+    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
+    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
+  ) %>%
+  inner_join(t_calls_ccc, by = "CASE_ID") %>%
+  filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
+  mutate(
+    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
+    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
+  ) %>%
+  ggplot(aes(CALL_DIFF)) +
+  geom_histogram(bins = 100) +
+  coord_cartesian(xlim = c(0, 200)) +
+  labs(
+    x = "Days after report",
+    y = "# of Calls",
+    title = "Number of Calls after Claim Reporting by Days Passed"
+  )
+```
+
+
 ```{r, message=FALSE}
 t_cutpoints %>%
   select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
@@ -482,21 +517,22 @@ t_cutpoints %>%
     THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
     THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
   ) %>%
-  inner_join(t_events_ccc, by = "CASE_ID") %>%
+  inner_join(t_calls_ccc, by = "CASE_ID") %>%
   filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
   mutate(
     CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
-    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
+    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 200, 10), Inf)),
+    ACTIVITY_EN = factor(case_when(
+      ACTIVITY_EN == "Tajekoztatas" ~ "Provide information",
+      ACTIVITY_EN == "Reklamacio  OKK-ba tovabbitva" ~ "Reclamation",
+      TRUE ~ "Other"
+    ), levels = c("Provide information", "Reclamation", "Other"))
   ) %>%
-  group_by(CALL_DIFF_CAT, THROUGHPUT_TIME_CAT) %>%
-  summarize(NUM_OF_CALLS = n()) %>%
-  ungroup() %>%
-  ggplot(aes(x = CALL_DIFF_CAT, y = NUM_OF_CALLS, group = 1)) +
-  geom_line() +
-  theme(axis.text.x = element_text(angle = 90, size = 6)) +
-  facet_grid(. ~ THROUGHPUT_TIME_CAT)
+  ggplot(aes(CALL_DIFF)) +
+  geom_histogram(bins = 100) +
+  coord_cartesian(xlim = c(0, 200)) +
+  facet_grid(. ~ ACTIVITY_EN)
 ```
-
 
 ## Claims Handling
 
