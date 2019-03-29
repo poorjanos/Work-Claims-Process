@@ -1,7 +1,7 @@
 ---
 title: "Casco Claims: Branches and Interactions"
 author: "János Poór"
-date: 'March 22, 2019'
+date: 'March 29, 2019'
 output: rmdformats::readthedown
 ---
 
@@ -78,7 +78,7 @@ t_eventlog <- t_eventlog %>% mutate_at(vars(EVENT_END), ymd_hms)
 t_branches <- t_branches %>% mutate_at(vars(CLAIM_REPORT_DATE, CLAIM_DECISION_DATE, CLAIM_CLOSE_DATE), ymd_hms)
 ```
 
-# TL;DR
+# 1. TL;DR
 
 Outline of the main conclusions of the analysis of Casco claims process branches and interactions:  
 
@@ -88,18 +88,20 @@ Outline of the main conclusions of the analysis of Casco claims process branches
 * Interactions  
 	+ Contact Center: less than 50% of cases have Contact Center interactions
 	+ Those cases that have Contact Center interactions have on average 5
-	+ Claims Handling: all cases have Claims handling interactions with an average of 17
+	+ Claims Handling: all cases have Claims handling interactions with an average of 17  
+	    - 12 out of these 17 interactions are done by claim handling experts (rest by logistics or other depts)
 	+ Exception flow has most interactions
 * Lifecycles  
 	+ Most interactions happen between report date and closing date of claim irrespective of process branch
-	+ 30% of calls happen in exception flow between report date and closing date of claim
+	+ 30% of calls happen in exception flow between report date and closing date of claim  
+	    - Customers are most likely to call in between 5-50 days when their claim enters a pending status
 	+ 50% of Claim Handling interactions between report date and closing date of claim
 	
 ***	
 
-# Overview of Casco Claims
+# 2. Overview of Casco Claims
 
-## Monthly Volume and Throughput Time of Reported Casco Claims
+## 2.1. Monthly Volume and Throughput Time of Reported Casco Claims
 
 Dataset contains 12K reported and closed Casco claims that arrived between 2017/01 and 2018/06. Monthly fluctuation reflects seasonal peaks in summer months.
 
@@ -139,7 +141,7 @@ grid.arrange(p1, p2, nrow = 2)
 ```
 
 
-## Monthly Volume and Throughput Time By Process Branch
+## 2.2. Monthly Volume and Throughput Time By Process Branch
 
 Process has three main branches:  
 
@@ -190,9 +192,9 @@ grid.arrange(p3, p4, nrow = 2)
 
 
 
-# Analysis of Interactions
+# 3. Analysis of Interactions
 
-## Average Interactions per Claim File
+## 3.1. Average Interactions per Claim File
 
 For both  Contact Center and Claims Handling we can compute how many times operators interacted with the claim file in the workflow system (Kontakt).
 
@@ -249,7 +251,7 @@ t_branches %>%
 ```
 
 
-## Average Interactions per Claim File By Process Branch
+## 3.2. Average Interactions per Claim File By Process Branch
 
 Breakdowns by process branch show that the decreasing trend of average interaction number per claim file in Claims Handling is due to the exception flow.
 
@@ -291,16 +293,18 @@ t_branches %>%
 ```
 
 
-## Breakdown of Claims Handling Interactions by Department
+## 3.3. Breakdown of Claims Handling Interactions by Department
 
 ```{r, message=FALSE}
 # Compute interactions per case
 t_interaction_counts_claimsdept <- t_eventlog %>%
-  filter(ACTIVITY_TYPE == "KONTAKT OKK") %>% 
-  mutate(DEPT = stringr::str_extract(USER_ID, '[^OKK/].*?(?=\\\\)')) %>%
-  mutate(DEPT = case_when(DEPT == "Gepjarmu/szakertok" ~ "Car/Experts",
-                          DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics/Mailroom",
-                          TRUE ~ "Other")) %>% 
+  filter(ACTIVITY_TYPE == "KONTAKT OKK") %>%
+  mutate(DEPT = stringr::str_extract(USER_ID, "[^OKK/].*?(?=\\\\)")) %>%
+  mutate(DEPT = case_when(
+    DEPT == "Gepjarmu/szakertok" ~ "Car/Experts",
+    DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics/Mailroom",
+    TRUE ~ "Other"
+  )) %>%
   group_by(CASE_ID, DEPT) %>%
   summarize(COUNT_OF_ACTIVITY = n()) %>%
   ungroup()
@@ -309,11 +313,11 @@ t_interaction_counts_claimsdept <- t_eventlog %>%
 t_branches %>%
   filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
   mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
-  select(CASE_ID, CLAIM_REPORT_MONTH) %>% 
-  left_join(t_interaction_counts_claimsdept, by = c("CASE_ID")) %>% 
-  filter(!is.na(DEPT)) %>% 
-  group_by(CLAIM_REPORT_MONTH, DEPT) %>% 
-  summarize(AVG_INT = mean(COUNT_OF_ACTIVITY, na.rm = TRUE)) %>% 
+  select(CASE_ID, CLAIM_REPORT_MONTH) %>%
+  left_join(t_interaction_counts_claimsdept, by = c("CASE_ID")) %>%
+  filter(!is.na(DEPT)) %>%
+  group_by(CLAIM_REPORT_MONTH, DEPT) %>%
+  summarize(AVG_INT = mean(COUNT_OF_ACTIVITY, na.rm = TRUE)) %>%
   ungroup() %>%
   ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_INT, group = DEPT, color = DEPT)) +
   geom_line() +
@@ -326,7 +330,7 @@ t_branches %>%
 ```
 
 
-## Breakdown of Claims Handling Interactions by Department by Process Branch
+## 3.4. Breakdown of Claims Handling Interactions by Department by Process Branch
 
 ```{r, message=FALSE}
 # Add interactions to base table
@@ -354,7 +358,7 @@ t_branches %>%
 
 
 
-# Analysis of Claims Lifecycle
+# 4. Analysis of Claims Lifecycle
 
 Claim file lifecycle can be computed from Fairkar status data. The two major lifecycle cutpoints are:  
 
@@ -370,9 +374,9 @@ The two cutpoints yield five lifecylcle sequences:
 * After closing  
 
 
-## Contact Center
+## 4.1. Contact Center
 
-### Contact Center Calls across Claims Lifecycle
+### 4.1.1. Contact Center Calls across Claims Lifecycle
 
 Breakdown of calls for those claim files that had calls (note: not every claim file has Contact Center interactions, see previous section)
 
@@ -444,7 +448,7 @@ by_case_id_ccc %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
 ```
 
 
-### Contact Center Calls across Claims Lifecycle by Process Branch
+### 4.1.2. Contact Center Calls across Claims Lifecycle by Process Branch
 
 ```{r, message=FALSE}
 # Graph
@@ -473,9 +477,12 @@ by_case_id_ccc %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
 ```
 
 
-### Distribution of Calls between Report and Close Dates
+### 4.1.3. Distribution of Calls between Report and Close Dates
 
-Most calls are received between report and closing date. Breaking down this period by days passed after report shows that most calls are received either right after report (between 0-5 days) or after 3 months (greater than 100 days).
+Most calls are received between report and closing date. Breaking down this period by days passed after report shows that:
+
+* most calls are received 5 to 10 days after report
+* on the exception flow calls keep coming in big volumes until the 50th day
 
 ```{r, message=FALSE}
 t_calls_ccc <- t_eventlog %>%
@@ -484,12 +491,12 @@ t_calls_ccc <- t_eventlog %>%
       ACTIVITY_TYPE == "KONTAKT CCC" &
       ACTIVITY_CHANNEL == "CALL"
   ) %>%
-  select(CASE_ID, CASE_TYPE, MILESTONES, ACTIVITY_EN, EVENT_END)
-
+  select(CASE_ID, MILESTONES, ACTIVITY_EN, EVENT_END)
 
 t_cutpoints %>%
   select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
   mutate(
+    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
     THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
     THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
   ) %>%
@@ -502,6 +509,7 @@ t_cutpoints %>%
   ggplot(aes(CALL_DIFF)) +
   geom_histogram(bins = 100) +
   coord_cartesian(xlim = c(0, 200)) +
+  facet_grid(.~CASE_TYPE) +
   labs(
     x = "Days after report",
     y = "# of Calls",
@@ -509,11 +517,17 @@ t_cutpoints %>%
   )
 ```
 
+Two main call reasons in this period are:  
+
+* Provide information: peaks at 5 days after report
+    + Exception flow genereates most provide information calls until approx. 50th day
+* Reclamation: peaks at 25 days after report
 
 ```{r, message=FALSE}
 t_cutpoints %>%
   select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
   mutate(
+    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
     THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
     THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
   ) %>%
@@ -521,7 +535,7 @@ t_cutpoints %>%
   filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
   mutate(
     CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
-    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 200, 10), Inf)),
+    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf)),
     ACTIVITY_EN = factor(case_when(
       ACTIVITY_EN == "Tajekoztatas" ~ "Provide information",
       ACTIVITY_EN == "Reklamacio  OKK-ba tovabbitva" ~ "Reclamation",
@@ -531,12 +545,18 @@ t_cutpoints %>%
   ggplot(aes(CALL_DIFF)) +
   geom_histogram(bins = 100) +
   coord_cartesian(xlim = c(0, 200)) +
-  facet_grid(. ~ ACTIVITY_EN)
+  facet_grid(CASE_TYPE ~ ACTIVITY_EN) +
+  labs(
+    x = "Days after report",
+    y = "# of Calls",
+    title = "Number of Calls after Claim Reporting by Days Passed"
+  )
 ```
 
-## Claims Handling
 
-### Claims Handling Interactions across Claims Lifecycle
+## 4.2. Claims Handling
+
+### 4.2.1. Claims Handling Interactions across Claims Lifecycle
 
 ```{r, message=FALSE}
 # Genereate bins
@@ -573,7 +593,7 @@ by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
 ```
 
 
-### Claims Handling Interactions across Claims Lifecycle by Process Branch
+### 4.2.2. Claims Handling Interactions across Claims Lifecycle by Process Branch
 
 ```{r, message=FALSE}
 # Graph
@@ -600,4 +620,75 @@ by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
         y = "# of Claims Handling Interactions",
         title = "Number of Claims Handling Interactions across Claim File Lifecycle \nby Process Branch"
       )
+```
+
+### 4.2.3. Distribution of Claims Handling Interactions between Report and Close Dates
+
+Most interactions happen between report and closing date. Breaking down this period by days passed after report shows that:
+
+* most interactions take place 5 to 10 days after report
+
+```{r, message=FALSE}
+t_events_okk <- t_eventlog %>%
+  filter(
+    CASE_ID %in% t_cutpoints_long$CASE_ID &
+      ACTIVITY_TYPE == "KONTAKT OKK"
+  ) %>%
+  select(CASE_ID, MILESTONES, EVENT_END, USER_ID) %>%
+  mutate(DEPT = stringr::str_extract(USER_ID, "[^OKK/].*?(?=\\\\)")) %>%
+  mutate(DEPT = case_when(
+    DEPT == "Gepjarmu/szakertok" ~ "Car/Experts",
+    DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics/Mailroom",
+    TRUE ~ "Other"
+  ))
+
+t_cutpoints %>%
+  select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
+  mutate(
+    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
+    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
+    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
+  ) %>%
+  inner_join(t_events_okk, by = "CASE_ID") %>%
+  filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
+  mutate(
+    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
+    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
+  ) %>%
+  ggplot(aes(CALL_DIFF)) +
+  geom_histogram(bins = 100) +
+  coord_cartesian(xlim = c(0, 200)) +
+  facet_grid(. ~ CASE_TYPE) +
+  labs(
+    x = "Days after report",
+    y = "# of Calls",
+    title = "Number of Calls after Claim Reporting by Days Passed"
+  )
+```
+
+There is no difference in peak point between process branches.
+
+```{r, message=FALSE}
+t_cutpoints %>%
+  select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
+  mutate(
+    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
+    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
+    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
+  ) %>%
+  inner_join(t_events_okk, by = "CASE_ID") %>%
+  filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
+  mutate(
+    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
+    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
+  ) %>%
+  ggplot(aes(CALL_DIFF)) +
+  geom_histogram(bins = 100) +
+  coord_cartesian(xlim = c(0, 200)) +
+  facet_grid(DEPT ~ CASE_TYPE) +
+  labs(
+    x = "Days after report",
+    y = "# of Calls",
+    title = "Number of Calls after Claim Reporting by Days Passed"
+  )
 ```
