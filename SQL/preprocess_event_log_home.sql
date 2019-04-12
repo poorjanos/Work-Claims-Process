@@ -1,3 +1,5 @@
+/* Generate event log and main process milestones for HOME CLAIMS from ABLAK system */
+
 DROP TABLE t_claims_home;
 
 CREATE TABLE t_claims_home
@@ -5,6 +7,7 @@ AS
    SELECT   e.f_szerz_azon,
             e.f_karszam,
             b.f_tszam,
+            e.f_karszam || '/' || f_tszam as f_azon,
             e.f_karido,
             e.f_karbeido,
             e.f_modkod,
@@ -25,16 +28,65 @@ DROP TABLE t_claims_home_distinct;
 CREATE TABLE t_claims_home_distinct
 AS
      SELECT   DISTINCT f_karszam,
+                       f_tszam,
+                       f_karszam || '/' || f_tszam as f_azon,
+                       f_modkod,
                        f_karido,
                        f_karbeido,
                        MIN (f_utalas) AS f_utalas_first
        FROM   t_claims_home
-   GROUP BY   f_karszam, f_karido, f_karbeido
-   ORDER BY   1, 2, 3;
+   GROUP BY   f_karszam, f_tszam, f_karszam || '/' || f_tszam, f_modkod, f_karido, f_karbeido
+   ORDER BY   1, 2, 3, 4, 5, 6;
 
 COMMIT;
 
 
+/* Get paid from mesterr: first for exact matches */
+DROP TABLE t_claims_home_distinct_a;
+CREATE TABLE t_claims_home_distinct_a
+AS
+   SELECT   a.*, b.f_paid
+     FROM   t_claims_home_distinct a, (SELECT   DISTINCT f_paid, f_azon
+                                         FROM   mesterr.pa_ivk_paid
+                                        WHERE   f_azon_tip = 'K') b
+    WHERE   a.f_azon = b.f_azon;
+COMMIT;
+
+
+/* Get paid from mesterr: second for f_karszam having only one f_tszam */
+DROP TABLE t_claims_home_distinct_b;
+CREATE TABLE t_claims_home_distinct_b
+AS
+   SELECT   c.*, d.f_paid
+     FROM   (SELECT   *
+               FROM   t_claims_home_distinct a
+              WHERE   NOT EXISTS
+                         (SELECT   1
+                            FROM   t_claims_home_distinct b
+                           WHERE   f_tszam > 1 AND a.f_azon = b.f_azon)
+                      AND f_azon NOT IN
+                               (SELECT   f_azon FROM t_claims_home_distinct_a))
+            c,
+            (SELECT   DISTINCT f_paid, f_azon
+               FROM   mesterr.pa_ivk_paid
+              WHERE   f_azon_tip = 'K') d
+    WHERE   TO_CHAR (c.f_karszam) = d.f_azon;
+COMMIT;
+                      
+
+
+/* Join tables with f_paid */
+CREATE TABLE t_claims_home_distinct_paid
+AS
+   SELECT   * FROM t_claims_home_distinct_a
+   UNION
+   SELECT   * FROM t_claims_home_distinct_b;
+COMMIT;
+      
+                      
+
+
+/* Build event log */
 DROP TABLE t_claims_home_eventlog;
 
 CREATE TABLE t_claims_home_eventlog
