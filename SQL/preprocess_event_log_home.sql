@@ -1,6 +1,7 @@
+/************************************************************************************/
 /* Generate event log and main process milestones for HOME CLAIMS from ABLAK system */
-
 DROP TABLE t_claims_home;
+COMMIT;
 
 CREATE TABLE t_claims_home
 AS
@@ -18,25 +19,52 @@ AS
             AND b.f_sorszam = k.f_sorszam
             AND k.f_allapot = '29'                                --kifezetett
             AND e.f_karbeido BETWEEN DATE '2017-01-01' AND DATE '2019-01-01'
-            AND e.f_modkod LIKE '219%';
+            AND e.f_modkod LIKE '219%'
+            AND b.f_vnem not in ('1', '2', '30', '31', '32', '42', '55'); --clean off unrelevant dangers (pet, accident and life)
 
 COMMIT;
 
 
 DROP TABLE t_claims_home_distinct;
+COMMIT;
 
 CREATE TABLE t_claims_home_distinct
 AS
-     SELECT   DISTINCT f_karszam,
-                       f_tszam,
-                       f_karszam || '/' || f_tszam as f_azon,
-                       f_modkod,
-                       f_karido,
-                       f_karbeido,
-                       MIN (f_utalas) AS f_utalas_first
-       FROM   t_claims_home
-   GROUP BY   f_karszam, f_tszam, f_karszam || '/' || f_tszam, f_modkod, f_karido, f_karbeido
-   ORDER BY   1, 2, 3, 4, 5, 6;
+     SELECT   DISTINCT
+              f_karszam,
+              f_tszam,
+              f_karszam || '/' || f_tszam AS f_azon,
+              f_modkod,
+              CASE
+                 WHEN EXISTS
+                         (SELECT   1
+                            FROM   ab_t_kar_osszes_mozgas b
+                           WHERE       f_datum >= DATE '2016-10-01'
+                                   AND f_mozgtip = 'N289'
+                                   AND a.f_karszam = b.f_karszam
+                                   AND a.f_tszam = b.f_tszam)
+                 THEN
+                    'Exception'
+                 ELSE
+                    'Standard'
+              END
+                 AS case_type,
+              f_karido,
+              f_karbeido,
+              MIN (f_utalas) AS f_utalas_first
+       FROM   t_claims_home a
+   GROUP BY   f_karszam,
+              f_tszam,
+              f_karszam || '/' || f_tszam,
+              f_modkod,
+              f_karido,
+              f_karbeido
+   ORDER BY   1,
+              2,
+              3,
+              4,
+              5,
+              6;
 
 COMMIT;
 
@@ -76,17 +104,95 @@ COMMIT;
 
 
 /* Join tables with f_paid */
+DROP TABLE t_claims_home_distinct_paid;
+
 CREATE TABLE t_claims_home_distinct_paid
 AS
    SELECT   * FROM t_claims_home_distinct_a
    UNION
    SELECT   * FROM t_claims_home_distinct_b;
 COMMIT;
+
       
-                      
+/************************************************************************************/
+/* Build milestones for cutpoint analysis */
+DROP TABLE T_CLAIMS_HOME_MILESTONES;
+COMMIT;
 
 
-/* Build event log */
+CREATE TABLE T_CLAIMS_HOME_MILESTONES
+AS
+   SELECT   f_paid AS case_id,
+            case_type,
+            f_modkod as product_code,
+            TRUNC (f_karbeido) + 1 / (24 * 60 * 60) AS report_lowerbound,
+            TRUNC (f_karbeido + 1) - 1 / (24 * 60 * 60) AS report_upperbound,
+            TRUNC (f_utalas_first) + 1 / (24 * 60 * 60) AS close_lowerbound,
+            TRUNC (f_utalas_first + 1) - 1 / (24 * 60 * 60)
+               AS close_upperbound
+     FROM   t_claims_home_distinct_paid
+    WHERE   f_karbeido IS NOT NULL AND f_utalas_first IS NOT NULL
+            AND TRUNC(f_karbeido + 1) - 1 / (24 * 60 * 60) <
+                  (f_utalas_first) + 1 / (24 * 60 * 60);--report upper less than close lower
+COMMIT;
+
+
+
+/* Quick test for CCC activitiy freqs */
+SELECT   COUNT (DISTINCT f_paid)
+  FROM   mesterr.export_pa_wflog3 a
+ WHERE       EXISTS (SELECT   1
+                       FROM   T_CLAIMS_HOME_MILESTONES b
+                      WHERE   a.f_paid = b.case_id)
+         AND a.wflog_user LIKE 'CCC/%'
+         AND attrib3 = 'CALL';
+--120K CCC interactions for 2017-2018
+--of which 73K CCC CALLS
+
+
+/************************************************************************************/
+/* Build event log for cutpoint analysis */
+DROP TABLE t_claims_home_kontakt_eventlog;
+COMMIT;
+
+CREATE TABLE t_claims_home_kontakt_eventlog
+AS
+     SELECT   f_paid AS case_id,
+              CASE
+                 WHEN hun1eng = 'Provide information'
+                 THEN
+                    hun1eng || attrib1eng
+                 ELSE
+                    hun1eng
+              END
+                 AS activity_en,
+              f_idopont AS event_end,
+              CASE
+                 WHEN wflog_user LIKE 'CCC/%' THEN 'KONTAKT CCC'
+                 WHEN wflog_user LIKE 'OKK/%' THEN 'KONTAKT OKK'
+              END
+                 AS activity_type,
+              CASE
+                 WHEN attrib2 = 'Call Center' THEN 'CALL'
+                 WHEN attrib2 = 'Mail' THEN 'MAIL'
+                 WHEN attrib2 = 'Fax' THEN 'FAX'
+                 WHEN attrib2 = 'PubWeb' THEN 'PWEB'
+                 ELSE 'DOC'
+              END
+                 AS activity_channel
+       FROM   mesterr.export_pa_wflog3 a
+      WHERE       hun1 IS NOT NULL
+              AND EXISTS (SELECT   1
+                            FROM   T_CLAIMS_HOME_MILESTONES b
+                           WHERE   a.f_paid = b.case_id)
+              AND (a.wflog_user LIKE 'CCC/%' OR a.wflog_user LIKE 'OKK/%')
+   ORDER BY   f_paid, f_idopont;
+
+COMMIT;
+          
+          
+/************************************************************************************/
+/* Build ABLAK event log to load into ProcessGold */
 DROP TABLE t_claims_home_eventlog;
 
 CREATE TABLE t_claims_home_eventlog
@@ -135,3 +241,5 @@ AS
      FROM   t_claims_home_eventlog
     WHERE   f_mozgtip NOT LIKE 'N1%';
 COMMIT;
+
+
