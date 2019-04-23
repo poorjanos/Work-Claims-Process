@@ -56,8 +56,11 @@ jdbcConnection <-
   )
 
 # Fetch data
-query_branches <- "SELECT * FROM T_CLAIMS_HOME_DISTINCT_PAID"
+query_branches <- "SELECT * FROM T_CLAIMS_HOME_DISTINCT"
 t_branches <- dbGetQuery(jdbcConnection, query_branches)
+
+query_branches_paid <- "SELECT * FROM T_CLAIMS_HOME_DISTINCT_PAID"
+t_branches_paid <- dbGetQuery(jdbcConnection, query_branches_paid)
 
 query_cutpoints <- "SELECT * FROM T_CLAIMS_HOME_MILESTONES"
 t_cutpoints <- dbGetQuery(jdbcConnection, query_cutpoints)
@@ -75,6 +78,8 @@ dbDisconnect(jdbcConnection)
 t_eventlog <- t_eventlog %>% mutate_at(vars(EVENT_END), ymd_hms)
 
 t_branches <- t_branches %>% mutate_at(vars(F_KARIDO, F_KARBEIDO, F_UTALAS_FIRST), ymd_hms)
+
+t_branches_paid <- t_branches_paid %>% mutate_at(vars(F_KARIDO, F_KARBEIDO, F_UTALAS_FIRST), ymd_hms)
 ```
 
 # 1. TL;DR
@@ -100,16 +105,16 @@ Outline of the main conclusions of the analysis of Casco claims process branches
 	
 ***	
 
-# 2. Overview of Casco Claims
+# 2. Overview of Home Claims
 
 ## 2.1. Monthly Volume and Throughput Time of Reported Casco Claims
 
-Dataset contains 12K reported and closed Casco claims that arrived between 2017/01 and 2018/06. Monthly fluctuation reflects seasonal peaks in summer months.
+Dataset contains 275K reported and closed Home claims that were paid out between 2017/01 and 2018/12. Monthly fluctuation reflects seasonal peaks in summer months.
 
 ```{r, message=FALSE}
 p1 <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month")) %>%
   group_by(CLAIM_REPORT_MONTH) %>%
   summarize(COUNT_REPORTED_CLAIMS = n()) %>%
   ungroup() %>%
@@ -117,15 +122,15 @@ p1 <- t_branches %>%
   geom_line() +
   labs(
     x = "Month",
-    y = "# of Reported Casco Claims",
-    title = "Number of Reported Casco Claims per Month)"
+    y = "# of Reported Home Claims",
+    title = "Number of Reported Home Claims per Month"
   )
 
 p2 <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
   mutate(
-    CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month"),
-    THROUGHPUT_TIME = difftime(CLAIM_CLOSE_DATE, CLAIM_REPORT_DATE, units = "days")
+    CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month"),
+    THROUGHPUT_TIME = difftime(F_UTALAS_FIRST, F_KARBEIDO, units = "days")
   ) %>%
   group_by(CLAIM_REPORT_MONTH) %>%
   summarize(AVG_THROUGHPUT = mean(THROUGHPUT_TIME)) %>%
@@ -135,7 +140,7 @@ p2 <- t_branches %>%
   labs(
     x = "Month",
     y = "Throughput Time (days)",
-    title = "Throughput Time Reported Casco Claims per Month"
+    title = "Throughput Time Reported Home Claims per Month"
   )
 
 grid.arrange(p1, p2, nrow = 2)
@@ -152,38 +157,40 @@ Process has three main branches:
 
 ```{r, message=FALSE}
 p3 <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month")) %>%
   group_by(CLAIM_REPORT_MONTH, CASE_TYPE) %>%
   summarize(COUNT_REPORTED_CLAIMS = n()) %>%
   ungroup() %>%
-  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('ALTERNATIVE','STANDARD','EXCEPTION'))) %>% 
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('Simple', 'Standard','Exception'))) %>% 
   ggplot(aes(x = CLAIM_REPORT_MONTH, y = COUNT_REPORTED_CLAIMS)) +
   geom_line() +
+  theme(axis.text.x = element_text(angle = 90)) +
   facet_wrap(~ CASE_TYPE) +
   labs(
     x = "Month",
-    y = "# of Reported Casco Claims",
-    title = "Number of Reported Casco Claims per Month"
+    y = "# of Reported Home Claims",
+    title = "Number of Reported Home Claims per Month"
   )
 
 p4 <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
   mutate(
-    CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month"),
-    THROUGHPUT_TIME = difftime(CLAIM_CLOSE_DATE, CLAIM_REPORT_DATE, units = "days")
+    CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month"),
+    THROUGHPUT_TIME = difftime(F_UTALAS_FIRST, F_KARBEIDO, units = "days")
   ) %>%
   group_by(CLAIM_REPORT_MONTH, CASE_TYPE) %>%
   summarize(AVG_THROUGHPUT = mean(THROUGHPUT_TIME)) %>%
   ungroup() %>%
-  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('ALTERNATIVE','STANDARD','EXCEPTION'))) %>% 
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('Simple', 'Standard','Exception'))) %>% 
   ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_THROUGHPUT)) +
   geom_line() +
+  theme(axis.text.x = element_text(angle = 90)) +
   facet_wrap(~ CASE_TYPE) +
   labs(
     x = "Month",
     y = "Throughput Time (days)",
-    title = "Throughput Time Reported Casco Claims per Month"
+    title = "Throughput Time Reported Home Claims per Month"
   )
 
 grid.arrange(p3, p4, nrow = 2)
@@ -214,14 +221,15 @@ t_interaction_counts <- t_eventlog %>%
   ungroup() %>%
   tidyr::spread(key = ACTIVITY_TYPE, value = COUNT_OF_ACTIVITY, fill = 0)
 
-names(t_interaction_counts) <- c("CASE_ID", "FAIRKAR", "KONTAKT_CCC", "KONTAKT_OKK")
+names(t_interaction_counts) <- c("CASE_ID", "KONTAKT_CCC", "KONTAKT_OKK")
 
 # Add interactions to base table
 
 # Define claim files that have CCC interactions
-t_ccc_special <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+t_ccc_special <- t_branches_paid %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month"),
+         CASE_ID = F_PAID) %>%
   left_join(t_interaction_counts, by = c("CASE_ID")) %>%
   filter(KONTAKT_CCC != 0) %>% 
   group_by(CLAIM_REPORT_MONTH) %>%
@@ -229,9 +237,10 @@ t_ccc_special <- t_branches %>%
     ContactCenterSpecial = mean(KONTAKT_CCC, na.rm = TRUE))
 
 # Define interactions across all claim files
-t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+t_branches_paid %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month"),
+         CASE_ID = F_PAID) %>%
   left_join(t_interaction_counts, by = c("CASE_ID")) %>%
   group_by(CLAIM_REPORT_MONTH) %>%
   summarize(
@@ -243,6 +252,7 @@ t_branches %>%
   tidyr::gather(-CLAIM_REPORT_MONTH, key = ORG, value = AVG_INT) %>% 
   ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_INT)) +
     geom_line() +
+    theme(axis.text.x = element_text(angle = 90)) +
     facet_grid(.~ORG) +
     labs(
       x = "Month",
@@ -258,23 +268,25 @@ Breakdowns by process branch show that the decreasing trend of average interacti
 
 ```{r, message=FALSE}
 # Define claim files that have CCC interactions
-t_ccc_special_by_case_type <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+t_ccc_special_by_case_type <- t_branches_paid %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month"),
+         CASE_ID = F_PAID) %>%
   left_join(t_interaction_counts, by = c("CASE_ID")) %>%
   filter(KONTAKT_CCC != 0) %>%
-  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('ALTERNATIVE','STANDARD','EXCEPTION'))) %>% 
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('Simple', 'Standard','Exception'))) %>% 
   group_by(CLAIM_REPORT_MONTH, CASE_TYPE) %>%
   summarize(
     ContactCenterSpecial = mean(KONTAKT_CCC, na.rm = TRUE))
 
 
 # Add interactions to base table
-t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+t_branches_paid %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month"),
+         CASE_ID = F_PAID) %>%
   left_join(t_interaction_counts, by = c("CASE_ID")) %>%
-  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('ALTERNATIVE','STANDARD','EXCEPTION'))) %>% 
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('Simple', 'Standard','Exception'))) %>% 
   group_by(CLAIM_REPORT_MONTH, CASE_TYPE) %>%
   summarize(
     ContactCenter = mean(KONTAKT_CCC, na.rm = TRUE),
@@ -285,6 +297,7 @@ t_branches %>%
   tidyr::gather(-CLAIM_REPORT_MONTH, -CASE_TYPE, key = ORG, value = AVG_INT) %>% 
   ggplot(aes(x = CLAIM_REPORT_MONTH, -CASE_TYPE, y = AVG_INT)) +
     geom_line() +
+    theme(axis.text.x = element_text(angle = 90)) +
     facet_grid(CASE_TYPE~ORG) +
     labs(
       x = "Month",
@@ -302,8 +315,10 @@ t_interaction_counts_claimsdept <- t_eventlog %>%
   filter(ACTIVITY_TYPE == "KONTAKT OKK") %>%
   mutate(DEPT = stringr::str_extract(USER_ID, "[^OKK/].*?(?=\\\\)")) %>%
   mutate(DEPT = case_when(
-    DEPT == "Gepjarmu/szakertok" ~ "Car/Experts",
-    DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics/Mailroom",
+    DEPT == "Vagyon/Vezeto szakerto" ~ "Home/Experts",
+    DEPT == "Logisztikai csoport/Irattaros" ~ "Logistics",
+    DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics",
+    DEPT == "Penzugy" ~ "Financial",
     TRUE ~ "Other"
   )) %>%
   group_by(CASE_ID, DEPT) %>%
@@ -311,17 +326,19 @@ t_interaction_counts_claimsdept <- t_eventlog %>%
   ungroup()
 
 # Add interactions to base table
-t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+t_branches_paid %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month"),
+         CASE_ID = F_PAID) %>%
   select(CASE_ID, CLAIM_REPORT_MONTH) %>%
   left_join(t_interaction_counts_claimsdept, by = c("CASE_ID")) %>%
-  filter(!is.na(DEPT)) %>%
+  filter(!is.na(DEPT) & DEPT != "Other") %>%
   group_by(CLAIM_REPORT_MONTH, DEPT) %>%
   summarize(AVG_INT = mean(COUNT_OF_ACTIVITY, na.rm = TRUE)) %>%
   ungroup() %>%
   ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_INT, group = DEPT, color = DEPT)) +
   geom_line() +
+  theme(axis.text.x = element_text(angle = 90)) +
   geom_point() +
   labs(
     x = "Month",
@@ -335,18 +352,21 @@ t_branches %>%
 
 ```{r, message=FALSE}
 # Add interactions to base table
-t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
+t_branches_paid %>%
+  #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
+  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(F_KARBEIDO, unit = "month"),
+         CASE_ID = F_PAID) %>%
   select(CASE_ID, CLAIM_REPORT_MONTH, CASE_TYPE) %>% 
   left_join(t_interaction_counts_claimsdept, by = c("CASE_ID")) %>% 
-  filter(!is.na(DEPT)) %>% 
+  filter(!is.na(DEPT) & DEPT != "Other") %>% 
   group_by(CLAIM_REPORT_MONTH, DEPT, CASE_TYPE) %>% 
   summarize(AVG_INT = mean(COUNT_OF_ACTIVITY, na.rm = TRUE)) %>% 
   ungroup() %>%
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('Simple', 'Standard','Exception'))) %>% 
   ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_INT, group = DEPT, color = DEPT)) +
   geom_line() +
   geom_point() +
+  theme(axis.text.x = element_text(angle = 90)) +
   facet_grid(.~CASE_TYPE) +
   labs(
     x = "Month",
@@ -384,10 +404,11 @@ Breakdown of calls for those claim files that had calls (note: not every claim f
 ```{r, message=FALSE}
 # Define lifecycle cutpoints
 t_cutpoints_long <- t_cutpoints %>%
-  filter(REPORT_LOWERBOUND < as.Date("2018-07-01")) %>%
+  #filter(REPORT_LOWERBOUND < as.Date("2018-07-01")) %>%
+  filter(REPORT_LOWERBOUND != CLOSE_LOWERBOUND) %>% 
   mutate_at(vars(REPORT_LOWERBOUND:CLOSE_UPPERBOUND), ymd_hms) %>%
-  select(-DECISION_LOWERBOUND, -DECISION_UPPERBOUND) %>% 
-  tidyr::gather(-CASE_ID, -CASE_TYPE, -MILESTONES, key = CUTPOINT, value = CUTDATE) %>%
+  #select(-DECISION_LOWERBOUND, -DECISION_UPPERBOUND) %>% 
+  tidyr::gather(-CASE_ID, -CASE_TYPE, -PRODUCT_CODE, key = CUTPOINT, value = CUTDATE) %>%
   arrange(CASE_ID, CUTPOINT) %>% 
   filter(!is.na(CUTDATE))
 
@@ -398,14 +419,14 @@ t_events_ccc <- t_eventlog %>%
         CASE_ID %in% t_cutpoints_long$CASE_ID &
         ACTIVITY_TYPE == "KONTAKT CCC" &
         ACTIVITY_CHANNEL == "CALL") %>%
-  select(CASE_ID, CASE_TYPE, MILESTONES, EVENT_END)
+  select(CASE_ID, CASE_TYPE, EVENT_END)
 
 
 t_events_okk <- t_eventlog %>%
   filter(
         CASE_ID %in% t_cutpoints_long$CASE_ID &
         ACTIVITY_TYPE == "KONTAKT OKK") %>%
-  select(CASE_ID, CASE_TYPE, MILESTONES, EVENT_END)
+  select(CASE_ID, CASE_TYPE, EVENT_END)
 
 # Define Func to Compute Bins
 create_bins_2 <- function(df, case_id) {
@@ -418,12 +439,13 @@ create_bins_2 <- function(df, case_id) {
 
 # Genereate bins
 by_case_id_ccc <- t_events_ccc %>%
-  select(-MILESTONES) %>% 
+  #select(-MILESTONES) %>% 
   group_by(CASE_ID, CASE_TYPE) %>%
   nest() %>%
   mutate(BINS = map2(data, .$CASE_ID, ~create_bins_2(df = .x, case_id = .y)))
+```
 
-
+```{r, message=FALSE}
 # Graph
 by_case_id_ccc %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>% 
   mutate(
@@ -463,6 +485,7 @@ by_case_id_ccc %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
       BINS == 'CLOSE_UPPERBOUND' ~ '5_AFTER_CLOSE'
     )
   ) %>% 
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels = c('Simple', 'Standard','Exception'))) %>% 
   group_by(PERIOD, CASE_TYPE) %>% 
   summarize(N_OF_CALLS = n()) %>% 
   ungroup() %>% 
@@ -492,12 +515,12 @@ t_calls_ccc <- t_eventlog %>%
       ACTIVITY_TYPE == "KONTAKT CCC" &
       ACTIVITY_CHANNEL == "CALL"
   ) %>%
-  select(CASE_ID, MILESTONES, ACTIVITY_EN, EVENT_END)
+  select(CASE_ID, ACTIVITY_EN, EVENT_END)
 
 t_cutpoints %>%
   select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
   mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
+    CASE_TYPE = factor(CASE_TYPE, levels = c('Simple', 'Standard','Exception')),
     THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
     THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
   ) %>%
@@ -528,7 +551,7 @@ Two main call reasons in this period are:
 t_cutpoints %>%
   select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
   mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
+    CASE_TYPE = factor(CASE_TYPE, levels = c('Simple', 'Standard','Exception')),
     THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
     THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
   ) %>%
@@ -562,7 +585,7 @@ t_cutpoints %>%
 ```{r, message=FALSE}
 # Genereate bins
 by_case_id_okk <- t_events_okk %>%
-  select(-MILESTONES) %>% 
+  #select(-MILESTONES) %>% 
   group_by(CASE_ID, CASE_TYPE) %>%
   nest() %>%
   mutate(BINS = map2(data, .$CASE_ID, ~create_bins_2(df = .x, case_id = .y)))
@@ -608,6 +631,7 @@ by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
       BINS == 'CLOSE_UPPERBOUND' ~ '5_AFTER_CLOSE'
     )
   ) %>% 
+  mutate(CASE_TYPE = factor(CASE_TYPE, levels = c('Simple', 'Standard','Exception'))) %>% 
   group_by(PERIOD, CASE_TYPE) %>% 
   summarize(N_OF_CALLS = n()) %>% 
   ungroup() %>% 
@@ -635,25 +659,25 @@ t_events_okk <- t_eventlog %>%
     CASE_ID %in% t_cutpoints_long$CASE_ID &
       ACTIVITY_TYPE == "KONTAKT OKK"
   ) %>%
-  select(CASE_ID, MILESTONES, EVENT_END, USER_ID) %>%
+  select(CASE_ID, EVENT_END, USER_ID) %>%
   mutate(DEPT = stringr::str_extract(USER_ID, "[^OKK/].*?(?=\\\\)")) %>%
   mutate(DEPT = case_when(
-    DEPT == "Gepjarmu/szakertok" ~ "Car/Experts",
-    DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics/Mailroom",
+    DEPT == "Vagyon/Vezeto szakerto" ~ "Home/Experts",
+    DEPT == "Logisztikai csoport/Irattaros" ~ "Logistics",
+    DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics",
+    DEPT == "Penzugy" ~ "Financial",
     TRUE ~ "Other"
   ))
 
 t_cutpoints %>%
-  select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
+  select(CASE_ID, CASE_TYPE, CLOSE_UPPERBOUND) %>%
   mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
-    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
-    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
+    CASE_TYPE = factor(CASE_TYPE, levels = c('Simple', 'Standard','Exception'))
   ) %>%
   inner_join(t_events_okk, by = "CASE_ID") %>%
-  filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
+  filter(EVENT_END > CLOSE_UPPERBOUND) %>%
   mutate(
-    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
+    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, CLOSE_UPPERBOUND, units = "days"))),
     CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
   ) %>%
   ggplot(aes(CALL_DIFF)) +
@@ -661,9 +685,9 @@ t_cutpoints %>%
   coord_cartesian(xlim = c(0, 200)) +
   facet_grid(. ~ CASE_TYPE) +
   labs(
-    x = "Days after report",
+    x = "Days after closing",
     y = "# of Calls",
-    title = "Number of Interactions after Claim Reporting by Days Passed"
+    title = "Number of Interactions after Claim Closing (First Payment) by Days Passed"
   )
 ```
 
@@ -671,16 +695,14 @@ There is no difference in peak point between process branches.
 
 ```{r, message=FALSE}
 t_cutpoints %>%
-  select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
+  select(CASE_ID, CASE_TYPE, CLOSE_UPPERBOUND) %>%
   mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
-    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
-    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
+    CASE_TYPE = factor(CASE_TYPE, levels = c('Simple', 'Standard','Exception'))
   ) %>%
   inner_join(t_events_okk, by = "CASE_ID") %>%
-  filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
+  filter(EVENT_END > CLOSE_UPPERBOUND) %>%
   mutate(
-    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
+    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, CLOSE_UPPERBOUND, units = "days"))),
     CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
   ) %>%
   ggplot(aes(CALL_DIFF)) +
@@ -688,359 +710,11 @@ t_cutpoints %>%
   coord_cartesian(xlim = c(0, 200)) +
   facet_grid(DEPT ~ CASE_TYPE) +
   labs(
-    x = "Days after report",
+    x = "Days after closing",
     y = "# of Calls",
-    title = "Number of Interactions after Claim Reporting by Days Passed"
+    title = "Number of Interactions after Claim Closing (First Payment) by Days Passed"
   )
 ```
 
 ***
 
-
-# 5. Analysis of Claims Lifecycle (3 Cutpoints)
-
-Claim file lifecycle can be computed from Fairkar status data. The three major lifecycle cutpoints are:  
-
-* Date of reporting the claim
-* Date of survey ready
-* Date of closing the claim file  
-
-The three cutpoints yield seven lifecylcle sequences:  
-
-* Before reporting  
-* The day of rerporting  
-* Between reporting and survey ready
-* The day of survey ready
-* Between survey ready and closing
-* The day of closing  
-* After closing  
-
-
-## 5.1. Contact Center
-
-### 5.1.1. Contact Center Calls across Claims Lifecycle
-
-Breakdown of calls for those claim files that had calls (note: not every claim file has Contact Center interactions, see previous section)
-
-```{r, message=FALSE}
-# Define lifecycle cutpoints
-t_cutpoints_long_3 <- t_cutpoints %>%
-  filter(REPORT_LOWERBOUND < as.Date("2018-07-01")) %>%
-  mutate_at(vars(REPORT_LOWERBOUND:CLOSE_UPPERBOUND), ymd_hms) %>%
-  filter(!is.na(DECISION_LOWERBOUND)) %>% 
-  tidyr::gather(-CASE_ID, -CASE_TYPE, -MILESTONES, key = CUTPOINT, value = CUTDATE) %>%
-  arrange(CASE_ID, CUTPOINT) %>% 
-  filter(!is.na(CUTDATE))
-
-
-# Org specific event seqs
-t_events_ccc <- t_eventlog %>%
-  filter(
-        CASE_ID %in% t_cutpoints_long_3$CASE_ID &
-        ACTIVITY_TYPE == "KONTAKT CCC" &
-        ACTIVITY_CHANNEL == "CALL") %>%
-  select(CASE_ID, CASE_TYPE, MILESTONES, EVENT_END)
-
-
-t_events_okk <- t_eventlog %>%
-  filter(
-        CASE_ID %in% t_cutpoints_long_3$CASE_ID &
-        ACTIVITY_TYPE == "KONTAKT OKK") %>%
-  select(CASE_ID, CASE_TYPE, MILESTONES, EVENT_END)
-
-
-# Define Func to Compute Bins
-create_bins_3 <- function(df, case_id) {
-  t_cutpoints_long_filtered <- t_cutpoints_long_3[t_cutpoints_long_3$CASE_ID == case_id, ] %>% arrange(CUTDATE)
-  as.character(cut(df$EVENT_END,
-    breaks = c(t_cutpoints_long_filtered$CUTDATE, Inf),
-    labels = t_cutpoints_long_filtered$CUTPOINT
-  ))
-}
-
-# Genereate bins
-by_case_id_ccc_3 <- t_events_ccc %>%
-  select(-MILESTONES) %>% 
-  group_by(CASE_ID, CASE_TYPE) %>%
-  nest() %>%
-  mutate(BINS = map2(data, .$CASE_ID, ~create_bins_3(df = .x, case_id = .y)))
-
-
-# Graph
-by_case_id_ccc_3 %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>% 
-  mutate(
-    PERIOD = case_when(
-      is.na(BINS) ~ '1_BEFORE_REPORT',
-      BINS == 'REPORT_LOWERBOUND' ~ '2_ON_REPORT',
-      BINS == 'REPORT_UPPERBOUND' ~ '3_BETWEEN_REPORT_SURVEYREADY',
-      BINS == 'DECISION_LOWERBOUND' ~ '4_ON_SURVEYREADY',
-      BINS == 'DECISION_UPPERBOUND' ~ '5_BETWEEN_SURVEYREADY_CLOSE',
-      BINS == 'CLOSE_LOWERBOUND' ~ '6_ON_CLOSE',
-      BINS == 'CLOSE_UPPERBOUND' ~ '7_AFTER_CLOSE'
-    )
-  ) %>% 
-  group_by(PERIOD) %>% 
-  summarize(N_OF_CALLS = n()) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = PERIOD, y = N_OF_CALLS)) +
-    geom_bar(stat = "identity") +
-    theme(axis.text.x = element_text(angle = 90)) +
-    labs(
-        x = "Lifecycle",
-        y = "# of Calls",
-        title = "Number of Calls across Claim File Lifecycle"
-      )
-```
-
-
-### 5.1.2. Contact Center Calls across Claims Lifecycle by Process Branch
-
-```{r, message=FALSE}
-# Graph
-by_case_id_ccc_3 %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>% 
-   mutate(
-    PERIOD = case_when(
-      is.na(BINS) ~ '1_BEFORE_REPORT',
-      BINS == 'REPORT_LOWERBOUND' ~ '2_ON_REPORT',
-      BINS == 'REPORT_UPPERBOUND' ~ '3_BETWEEN_REPORT_SURVEYREADY',
-      BINS == 'DECISION_LOWERBOUND' ~ '4_ON_SURVEYREADY',
-      BINS == 'DECISION_UPPERBOUND' ~ '5_BETWEEN_SURVEYREADY_CLOSE',
-      BINS == 'CLOSE_LOWERBOUND' ~ '6_ON_CLOSE',
-      BINS == 'CLOSE_UPPERBOUND' ~ '7_AFTER_CLOSE'
-    )
-  ) %>% 
-  group_by(PERIOD, CASE_TYPE) %>% 
-  summarize(N_OF_CALLS = n()) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = PERIOD, y = N_OF_CALLS)) +
-    geom_bar(stat = "identity") +
-    theme(axis.text.x = element_text(angle = 90)) +
-    facet_grid(.~CASE_TYPE) +
-    labs(
-        x = "Lifecycle",
-        y = "# of Calls",
-        title = "Number of Calls across Claim File Lifecycle by Process Branch"
-      )
-```
-
-
-### 5.1.3. Distribution of Calls between Survey Ready and Close Dates
-
-Most calls are received between survey ready and closing date. Breaking down this period by days passed after survey ready shows that:
-
-* most calls are received 5 to 10 days after survey ready
-* most calls come in on the exception flow with peaks until the 20th day
-
-```{r, message=FALSE}
-t_calls_ccc <- t_eventlog %>%
-  filter(
-    CASE_ID %in% t_cutpoints_long$CASE_ID &
-      ACTIVITY_TYPE == "KONTAKT CCC" &
-      ACTIVITY_CHANNEL == "CALL"
-  ) %>%
-  select(CASE_ID, MILESTONES, ACTIVITY_EN, EVENT_END)
-
-t_cutpoints %>%
-  select(CASE_ID, CASE_TYPE, DECISION_UPPERBOUND, CLOSE_LOWERBOUND) %>%
-  filter(!is.na(DECISION_UPPERBOUND)) %>% 
-  mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
-    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, DECISION_UPPERBOUND, units = "days")),
-    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
-  ) %>%
-  inner_join(t_calls_ccc, by = "CASE_ID") %>%
-  filter(EVENT_END > DECISION_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
-  mutate(
-    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, DECISION_UPPERBOUND, units = "days"))),
-    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
-  ) %>%
-  ggplot(aes(CALL_DIFF)) +
-  geom_histogram(bins = 100) +
-  coord_cartesian(xlim = c(0, 200)) +
-  facet_grid(.~CASE_TYPE) +
-  labs(
-    x = "Days after survey ready",
-    y = "# of Calls",
-    title = "Number of Calls after Survey Ready by Days Passed"
-  )
-```
-
-Two main call reasons in this period are:  
-
-* Provide information: peaks at 5-10 days after report
-    + Exception flow genereates most provide information calls until approx. 25th day after survey ready
-* Reclamation: peaks at 15 days after survey ready
-
-```{r, message=FALSE}
-t_cutpoints %>%
-  select(CASE_ID, CASE_TYPE, DECISION_UPPERBOUND, CLOSE_LOWERBOUND) %>%
-  mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
-    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, DECISION_UPPERBOUND, units = "days")),
-    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
-  ) %>%
-  inner_join(t_calls_ccc, by = "CASE_ID") %>%
-  filter(EVENT_END > DECISION_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
-  mutate(
-    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, DECISION_UPPERBOUND, units = "days"))),
-    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf)),
-    ACTIVITY_EN = factor(case_when(
-      ACTIVITY_EN == "Tajekoztatas" ~ "Provide information",
-      ACTIVITY_EN == "Reklamacio  OKK-ba tovabbitva" ~ "Reclamation",
-      TRUE ~ "Other"
-    ), levels = c("Provide information", "Reclamation", "Other"))
-  ) %>%
-  ggplot(aes(CALL_DIFF)) +
-  geom_histogram(bins = 100) +
-  coord_cartesian(xlim = c(0, 200)) +
-  facet_grid(CASE_TYPE ~ ACTIVITY_EN) +
-  labs(
-    x = "Days after survey ready",
-    y = "# of Calls",
-    title = "Number of Calls after Survey Ready by Days Passed"
-  )
-```
-
-
-## 5.2. Claims Handling
-
-### 5.2.1. Claims Handling Interactions across Claims Lifecycle
-
-```{r, message=FALSE}
-# Genereate bins
-by_case_id_okk <- t_events_okk %>%
-  select(-MILESTONES) %>% 
-  group_by(CASE_ID, CASE_TYPE) %>%
-  nest() %>%
-  mutate(BINS = map2(data, .$CASE_ID, ~create_bins_3(df = .x, case_id = .y)))
-
-
-# Graph
-by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>% 
-   mutate(
-    PERIOD = case_when(
-      is.na(BINS) ~ '1_BEFORE_REPORT',
-      BINS == 'REPORT_LOWERBOUND' ~ '2_ON_REPORT',
-      BINS == 'REPORT_UPPERBOUND' ~ '3_BETWEEN_REPORT_SURVEYREADY',
-      BINS == 'DECISION_LOWERBOUND' ~ '4_ON_SURVEYREADY',
-      BINS == 'DECISION_UPPERBOUND' ~ '5_BETWEEN_SURVEYREADY_CLOSE',
-      BINS == 'CLOSE_LOWERBOUND' ~ '6_ON_CLOSE',
-      BINS == 'CLOSE_UPPERBOUND' ~ '7_AFTER_CLOSE'
-    )
-  ) %>% 
-  group_by(PERIOD) %>% 
-  summarize(N_OF_CALLS = n()) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = PERIOD, y = N_OF_CALLS)) +
-    geom_bar(stat = "identity") +
-    scale_y_continuous(label = unit_format(unit = "K", scale = 1e-3)) +
-    theme(axis.text.x = element_text(angle = 90)) +
-    labs(
-        x = "Lifecycle",
-        y = "# of Claims Handling Interactions",
-        title = "Number of Claims Handling Interactions across Claim File Lifecycle"
-      )
-```
-
-
-### 5.2.2. Claims Handling Interactions across Claims Lifecycle by Process Branch
-
-```{r, message=FALSE}
-# Graph
-by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>% 
-   mutate(
-    PERIOD = case_when(
-      is.na(BINS) ~ '1_BEFORE_REPORT',
-      BINS == 'REPORT_LOWERBOUND' ~ '2_ON_REPORT',
-      BINS == 'REPORT_UPPERBOUND' ~ '3_BETWEEN_REPORT_SURVEYREADY',
-      BINS == 'DECISION_LOWERBOUND' ~ '4_ON_SURVEYREADY',
-      BINS == 'DECISION_UPPERBOUND' ~ '5_BETWEEN_SURVEYREADY_CLOSE',
-      BINS == 'CLOSE_LOWERBOUND' ~ '6_ON_CLOSE',
-      BINS == 'CLOSE_UPPERBOUND' ~ '7_AFTER_CLOSE'
-    )
-  ) %>% 
-  group_by(PERIOD, CASE_TYPE) %>% 
-  summarize(N_OF_CALLS = n()) %>% 
-  ungroup() %>% 
-  ggplot(aes(x = PERIOD, y = N_OF_CALLS)) +
-    geom_bar(stat = "identity") +
-    scale_y_continuous(label = unit_format(unit = "K", scale = 1e-3)) +
-    theme(axis.text.x = element_text(angle = 90)) +
-    facet_grid(.~CASE_TYPE) +
-    labs(
-        x = "Lifecycle",
-        y = "# of Claims Handling Interactions",
-        title = "Number of Claims Handling Interactions across Claim File Lifecycle \nby Process Branch"
-      )
-```
-
-### 5.2.3. Distribution of Claims Handling Interactions between Report and Close Dates
-
-Most interactions happen between survey ready and closing date. Breaking down this period by days passed after survey ready shows that:
-
-* most interactions take place 0 to 5 days after survey ready
-
-```{r, message=FALSE}
-t_events_okk <- t_eventlog %>%
-  filter(
-    CASE_ID %in% t_cutpoints_long$CASE_ID &
-      ACTIVITY_TYPE == "KONTAKT OKK"
-  ) %>%
-  select(CASE_ID, MILESTONES, EVENT_END, USER_ID) %>%
-  mutate(DEPT = stringr::str_extract(USER_ID, "[^OKK/].*?(?=\\\\)")) %>%
-  mutate(DEPT = case_when(
-    DEPT == "Gepjarmu/szakertok" ~ "Car/Experts",
-    DEPT == "Logisztikai csoport/Levelfeldolgozo" ~ "Logistics/Mailroom",
-    TRUE ~ "Other"
-  ))
-
-t_cutpoints %>%
-  select(CASE_ID, CASE_TYPE,DECISION_UPPERBOUND, CLOSE_LOWERBOUND) %>%
-  mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
-    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, DECISION_UPPERBOUND, units = "days")),
-    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
-  ) %>%
-  inner_join(t_events_okk, by = "CASE_ID") %>%
-  filter(EVENT_END > DECISION_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
-  mutate(
-    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, DECISION_UPPERBOUND, units = "days"))),
-    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
-  ) %>%
-  ggplot(aes(CALL_DIFF)) +
-  geom_histogram(bins = 100) +
-  coord_cartesian(xlim = c(0, 200)) +
-  facet_grid(. ~ CASE_TYPE) +
-  labs(
-    x = "Days after survey ready",
-    y = "# of Calls",
-    title = "Number of Interactions after Survey Ready by Days Passed"
-  )
-```
-
-There is no difference in peak point between process branches.
-
-```{r, message=FALSE}
-t_cutpoints %>%
-  select(CASE_ID, CASE_TYPE, DECISION_UPPERBOUND, CLOSE_LOWERBOUND) %>%
-  mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c("ALTERNATIVE", "STANDARD", "EXCEPTION")),
-    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, DECISION_UPPERBOUND, units = "days")),
-    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
-  ) %>%
-  inner_join(t_events_okk, by = "CASE_ID") %>%
-  filter(EVENT_END > DECISION_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
-  mutate(
-    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, DECISION_UPPERBOUND, units = "days"))),
-    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
-  ) %>%
-  ggplot(aes(CALL_DIFF)) +
-  geom_histogram(bins = 100) +
-  coord_cartesian(xlim = c(0, 200)) +
-  facet_grid(DEPT ~ CASE_TYPE) +
-  labs(
-    x = "Days after survey ready",
-    y = "# of Calls",
-    title = "Number of Interactions after Survey Ready by Days Passed"
-  )
-```

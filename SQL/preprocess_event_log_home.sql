@@ -45,6 +45,15 @@ AS
                                    AND a.f_tszam = b.f_tszam)
                  THEN
                     'Exception'
+                 WHEN EXISTS
+                         (SELECT   1
+                            FROM   ab_t_kar_osszes_mozgas b
+                           WHERE       f_datum >= DATE '2016-10-01'
+                                   AND f_mozgtip = 'N312'
+                                   AND a.f_karszam = b.f_karszam
+                                   AND a.f_tszam = b.f_tszam)
+                 THEN
+                    'Simple'
                  ELSE
                     'Standard'
               END
@@ -116,7 +125,7 @@ COMMIT;
       
 /************************************************************************************/
 /* Build milestones for cutpoint analysis */
-DROP TABLE T_CLAIMS_HOME_MILESTONES;
+DROP TABLE ;
 COMMIT;
 
 
@@ -131,9 +140,9 @@ AS
             TRUNC (f_utalas_first + 1) - 1 / (24 * 60 * 60)
                AS close_upperbound
      FROM   t_claims_home_distinct_paid
-    WHERE   f_karbeido IS NOT NULL AND f_utalas_first IS NOT NULL
-            AND TRUNC(f_karbeido + 1) - 1 / (24 * 60 * 60) <
-                  (f_utalas_first) + 1 / (24 * 60 * 60);--report upper less than close lower
+    WHERE   f_karbeido IS NOT NULL AND f_utalas_first IS NOT NULL;
+--            AND TRUNC(f_karbeido + 1) - 1 / (24 * 60 * 60) <
+--                  (f_utalas_first) + 1 / (24 * 60 * 60);--report upper less than close lower
 COMMIT;
 
 
@@ -179,7 +188,8 @@ AS
                  WHEN attrib2 = 'PubWeb' THEN 'PWEB'
                  ELSE 'DOC'
               END
-                 AS activity_channel
+                 AS activity_channel,
+              wflog_user as user_id
        FROM   mesterr.export_pa_wflog3 a
       WHERE       hun1 IS NOT NULL
               AND EXISTS (SELECT   1
@@ -189,57 +199,81 @@ AS
    ORDER BY   f_paid, f_idopont;
 
 COMMIT;
-          
+
+
+/* Add process branch type to eventlog */ 
+CREATE INDEX idx_mile
+   ON T_CLAIMS_HOME_MILESTONES (case_id);
+
+CREATE INDEX idx_event
+   ON t_claims_home_kontakt_eventlog (case_id);
+COMMIT;
+
+
+ALTER TABLE t_claims_home_kontakt_eventlog
+ADD
+(case_type varchar2(20)
+);
+COMMIT;
+
+UPDATE   t_claims_home_kontakt_eventlog a
+   SET   case_type =
+            (SELECT   case_type
+               FROM   T_CLAIMS_HOME_MILESTONES b
+              WHERE   a.case_id = b.case_id);
+
+COMMIT;
+
           
 /************************************************************************************/
 /* Build ABLAK event log to load into ProcessGold */
-DROP TABLE t_claims_home_eventlog;
+--DROP TABLE t_claims_home_eventlog;
 
-CREATE TABLE t_claims_home_eventlog
-AS
-     SELECT   a.*,
-              b.f_mozgtip,
-              c.f_mnev,
-              d.f_mnev_eng,
-              b.f_datum
-       FROM   t_claims_home_distinct a,
-              (SELECT   DISTINCT f_karszam, f_mozgtip, f_datum
-                 FROM   ab_t_kar_osszes_mozgas where f_datum >= date '2016-10-01') b,
-              ab_t_mozgas_kodok c,
-              t_kar_mozg_en d
-      WHERE   a.f_karszam = b.f_karszam AND b.f_mozgtip = c.f_kod
-      and b.f_mozgtip = d.f_mozgtip
-   ORDER BY   a.f_karszam, b.f_datum;
-COMMIT;
+--CREATE TABLE t_claims_home_eventlog
+--AS
+--     SELECT   a.*,
+--              b.f_mozgtip,
+--              c.f_mnev,
+--              d.f_mnev_eng,
+--              b.f_datum
+--       FROM   t_claims_home_distinct a,
+--              (SELECT   DISTINCT f_karszam, f_mozgtip, f_datum
+--                 FROM   ab_t_kar_osszes_mozgas where f_datum >= date '2016-10-01') b,
+--              ab_t_mozgas_kodok c,
+--              t_kar_mozg_en d
+--      WHERE   a.f_karszam = b.f_karszam AND b.f_mozgtip = c.f_kod
+--      and b.f_mozgtip = d.f_mozgtip
+--   ORDER BY   a.f_karszam, b.f_datum;
+--COMMIT;
 
 
-DROP TABLE t_claims_home_pa_output;
-CREATE TABLE t_claims_home_pa_output
-AS
-   --Claim event date
-   SELECT   f_karszam as case_id, 'Claim event occured' as activity, f_karido as event_end
-     FROM   t_claims_home_eventlog
-   UNION
-   --Report date for those where we have both N% event and f_karbeido
-   SELECT   f_karszam,
-            'Claim reported' AS f_mnev_eng,
-            CASE WHEN f_karbeido < f_datum THEN f_karbeido ELSE f_datum END
-               AS f_datum
-     FROM   t_claims_home_eventlog
-    WHERE   f_mozgtip LIKE 'N1%'
-   UNION
-   --Report date for those where we do not have N% event
-   SELECT   f_karszam, 'Claim reported', f_karbeido
-     FROM   t_claims_home_eventlog a
-    WHERE   NOT EXISTS
-               (SELECT   1
-                  FROM   t_claims_home_eventlog b
-                 WHERE   f_mozgtip LIKE 'N1%' AND a.f_karszam = b.f_karszam)
-   UNION
-   --All other events
-   SELECT   f_karszam, f_mozgtip || ' ' || f_mnev_eng, f_datum
-     FROM   t_claims_home_eventlog
-    WHERE   f_mozgtip NOT LIKE 'N1%';
-COMMIT;
+--DROP TABLE t_claims_home_pa_output;
+--CREATE TABLE t_claims_home_pa_output
+--AS
+--   --Claim event date
+--   SELECT   f_karszam as case_id, 'Claim event occured' as activity, f_karido as event_end
+--     FROM   t_claims_home_eventlog
+--   UNION
+--   --Report date for those where we have both N% event and f_karbeido
+--   SELECT   f_karszam,
+--            'Claim reported' AS f_mnev_eng,
+--            CASE WHEN f_karbeido < f_datum THEN f_karbeido ELSE f_datum END
+--               AS f_datum
+--     FROM   t_claims_home_eventlog
+--    WHERE   f_mozgtip LIKE 'N1%'
+--   UNION
+--   --Report date for those where we do not have N% event
+--   SELECT   f_karszam, 'Claim reported', f_karbeido
+--     FROM   t_claims_home_eventlog a
+--    WHERE   NOT EXISTS
+--               (SELECT   1
+--                  FROM   t_claims_home_eventlog b
+--                 WHERE   f_mozgtip LIKE 'N1%' AND a.f_karszam = b.f_karszam)
+--   UNION
+--   --All other events
+--   SELECT   f_karszam, f_mozgtip || ' ' || f_mnev_eng, f_datum
+--     FROM   t_claims_home_eventlog
+--    WHERE   f_mozgtip NOT LIKE 'N1%';
+--COMMIT;
 
 
