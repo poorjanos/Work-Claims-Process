@@ -1,7 +1,7 @@
 ---
 title: "Home Claims: Branches and Interactions"
 author: "János Poór"
-date: 'April 23, 2019'
+date: 'April 24, 2019'
 output: rmdformats::readthedown
 ---
 
@@ -84,24 +84,21 @@ t_branches_paid <- t_branches_paid %>% mutate_at(vars(F_KARIDO, F_KARBEIDO, F_UT
 
 # 1. TL;DR
 
-Home claims are defined by excluding life related dangers (accident, pet) and special riders like assistance.
+Home claims are defined by excluding life related dangers (accident, pet) and special riders like assistance. In 2017-2018 there were
+275K paid claim of this sort. In Kontakt system we have found interacitons for 220K of those claims. 117K had Contact Center (not including external CC) interactions and 86K had Claim Handling Center interactions.
 
-Outline of the main conclusions of the analysis of Casco claims process branches and interactions:  
+Outline of the main conclusions of the analysis of Home claims process branches and interactions:  
 
 * Process branches  
-	+ Proportion of alternative (STP) claim management is minimal
-	+ Proporiton of standard (happyflow) and exception (pending) flow is about 50-50%
-* Interactions  
-	+ Contact Center: less than 50% of cases have Contact Center interactions
-	+ Those cases that have Contact Center interactions have on average 5
-	+ Claims Handling: all cases have Claims handling interactions with an average of 17  
-	    - 12 out of these 17 interactions are done by claim handling experts (rest by logistics or other depts)
-	+ Exception flow has most interactions
+	+ Simple claim management for about 20% of cases
+	+ Proporiton of standard flow (happyflow) is about 64%
+	+ Exception flow is 15%
+* Interactions (Kontakt system entries) 
+	+ Those cases that have Contact Center interactions have on average 1.8
+	+ Those cases that have Claims Handling interactions have on average 1.5
 * Lifecycles  
-	+ Most interactions happen between report date and closing date of claim irrespective of process branch
-	+ 30% of calls happen in exception flow between report date and closing date of claim  
-	    - Customers are most likely to call in between 5-50 days when their claim enters a pending status
-	+ 50% of Claim Handling interactions between report date and closing date of claim
+	+ Most Contact Center calls happen on date of report in stadard flow
+	+ Most Claims Handling interactions happen after closing of claim
 	
 ***	
 
@@ -151,7 +148,7 @@ grid.arrange(p1, p2, nrow = 2)
 
 Process has three main branches:  
 
-* Alternative: claim management on the phone without survey  
+* Simple: claim management for simple claims (typically broken glass)
 * Standard: claim management with survey without pending states (happyflow)   
 * Exception: claim management with survey with pending states
 
@@ -200,20 +197,18 @@ grid.arrange(p3, p4, nrow = 2)
 
 
 
-# 3. Analysis of Interactions
+<!-- # 3. Analysis of Interactions -->
 
-## 3.1. Average Interactions per Claim File
+<!-- ## 3.1. Average Interactions per Claim File -->
 
-For both  Contact Center and Claims Handling we can compute how many times operators interacted with the claim file in the workflow system (Kontakt).
+<!-- For both  Contact Center and Claims Handling we can compute how many times operators interacted with the claim file in the workflow system (Kontakt). -->
 
-Not every claim file has Contact Center interactions. The average number of Contact Center interactions needs to be differentiated:  
+<!-- Not every claim file has Contact Center interactions. The average number of Contact Center interactions needs to be differentiated:   -->
 
-* Contact Center General: average across ALL claim files  
-* Contact Center Special: average accross ONLY THOSE claim files that had Contact Center interactions
+<!-- * Contact Center General: average across ALL claim files   -->
+<!-- * Contact Center Special: average accross ONLY THOSE claim files that had Contact Center interactions -->
 
-For Claims Handling there is a decreasing trend of the number of average interactions in time.
-
-```{r, message=FALSE}
+```{r, message=FALSE, eval=FALSE}
 # Compute interactions per case
 t_interaction_counts <- t_eventlog %>%
   group_by(CASE_ID, ACTIVITY_TYPE) %>%
@@ -262,11 +257,10 @@ t_branches_paid %>%
 ```
 
 
-## 3.2. Average Interactions per Claim File By Process Branch
+<!-- ## 3.2. Average Interactions per Claim File By Process Branch -->
 
-Breakdowns by process branch show that the decreasing trend of average interaction number per claim file in Claims Handling is due to the exception flow.
 
-```{r, message=FALSE}
+```{r, message=FALSE, eval=FALSE}
 # Define claim files that have CCC interactions
 t_ccc_special_by_case_type <- t_branches_paid %>%
   #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
@@ -307,9 +301,9 @@ t_branches_paid %>%
 ```
 
 
-## 3.3. Breakdown of Claims Handling Interactions by Department
+<!-- ## 3.3. Breakdown of Claims Handling Interactions by Department -->
 
-```{r, message=FALSE}
+```{r, message=FALSE, eval=FALSE}
 # Compute interactions per case
 t_interaction_counts_claimsdept <- t_eventlog %>%
   filter(ACTIVITY_TYPE == "KONTAKT OKK") %>%
@@ -348,9 +342,9 @@ t_branches_paid %>%
 ```
 
 
-## 3.4. Breakdown of Claims Handling Interactions by Department by Process Branch
+<!-- ## 3.4. Breakdown of Claims Handling Interactions by Department by Process Branch -->
 
-```{r, message=FALSE}
+```{r, message=FALSE, eval=FALSE}
 # Add interactions to base table
 t_branches_paid %>%
   #filter(CLAIM_REPORT_DATE < as.Date("2018-07-01")) %>%
@@ -375,16 +369,16 @@ t_branches_paid %>%
   )
 ```
 
-***
+<!-- *** -->
 
 
 
-# 4. Analysis of Claims Lifecycle (2 Cutpoints)
+# 3. Analysis of Claims Lifecycle (2 Cutpoints)
 
-Claim file lifecycle can be computed from Fairkar status data. The two major lifecycle cutpoints are:  
+Claim file lifecycle can be computed from ABLAK status data. The two major lifecycle cutpoints are:  
 
 * Date of reporting the claim  
-* Date of closing the claim file  
+* Date of closing the claim file (defined as the date of first payment for Home)
 
 The two cutpoints yield five lifecylcle sequences:  
 
@@ -395,11 +389,11 @@ The two cutpoints yield five lifecylcle sequences:
 * After closing  
 
 
-## 4.1. Contact Center
+## 3.1. Contact Center
 
-### 4.1.1. Contact Center Calls across Claims Lifecycle
+### 3.1.1. Contact Center Calls across Claims Lifecycle
 
-Breakdown of calls for those claim files that had calls (note: not every claim file has Contact Center interactions, see previous section)
+Breakdown of calls for those claim files that had calls (note: not every claim file has Contact Center interactions, see previous section). The pattern shows that most calls are realted to claim reporting.
 
 ```{r, message=FALSE}
 # Define lifecycle cutpoints
@@ -471,7 +465,9 @@ by_case_id_ccc %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
 ```
 
 
-### 4.1.2. Contact Center Calls across Claims Lifecycle by Process Branch
+### 3.1.2. Contact Center Calls across Claims Lifecycle by Process Branch
+
+Most calls are claim report calls on the standard branch. Other branches have very little or no calls.
 
 ```{r, message=FALSE}
 # Graph
@@ -501,86 +497,14 @@ by_case_id_ccc %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
 ```
 
 
-### 4.1.3. Distribution of Calls between Report and Close Dates
-
-Most calls are received between report and closing date. Breaking down this period by days passed after report shows that:
-
-* most calls are received 5 to 10 days after report
-* on the exception flow calls keep coming in big volumes until the 50th day
-
-```{r, message=FALSE}
-t_calls_ccc <- t_eventlog %>%
-  filter(
-    CASE_ID %in% t_cutpoints_long$CASE_ID &
-      ACTIVITY_TYPE == "KONTAKT CCC" &
-      ACTIVITY_CHANNEL == "CALL"
-  ) %>%
-  select(CASE_ID, ACTIVITY_EN, EVENT_END)
-
-t_cutpoints %>%
-  select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
-  mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c('Simple', 'Standard','Exception')),
-    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
-    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
-  ) %>%
-  inner_join(t_calls_ccc, by = "CASE_ID") %>%
-  filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
-  mutate(
-    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
-    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf))
-  ) %>%
-  ggplot(aes(CALL_DIFF)) +
-  geom_histogram(bins = 100) +
-  coord_cartesian(xlim = c(0, 200)) +
-  facet_grid(.~CASE_TYPE) +
-  labs(
-    x = "Days after report",
-    y = "# of Calls",
-    title = "Number of Calls after Claim Reporting by Days Passed"
-  )
-```
-
-Two main call reasons in this period are:  
-
-* Provide information: peaks at 5 days after report
-    + Exception flow genereates most provide information calls until approx. 50th day
-* Reclamation: peaks at 25 days after report
-
-```{r, message=FALSE}
-t_cutpoints %>%
-  select(CASE_ID, CASE_TYPE, REPORT_UPPERBOUND, CLOSE_LOWERBOUND) %>%
-  mutate(
-    CASE_TYPE = factor(CASE_TYPE, levels = c('Simple', 'Standard','Exception')),
-    THROUGHPUT_TIME = as.numeric(difftime(CLOSE_LOWERBOUND, REPORT_UPPERBOUND, units = "days")),
-    THROUGHPUT_TIME_CAT = cut(THROUGHPUT_TIME, c(seq(0, 90, 15), Inf))
-  ) %>%
-  inner_join(t_calls_ccc, by = "CASE_ID") %>%
-  filter(EVENT_END > REPORT_UPPERBOUND & EVENT_END < CLOSE_LOWERBOUND) %>%
-  mutate(
-    CALL_DIFF = ceiling(as.numeric(difftime(EVENT_END, REPORT_UPPERBOUND, units = "days"))),
-    CALL_DIFF_CAT = cut(CALL_DIFF, c(seq(0, 100, 5), Inf)),
-    ACTIVITY_EN = factor(case_when(
-      ACTIVITY_EN == "Tajekoztatas" ~ "Provide information",
-      ACTIVITY_EN == "Reklamacio  OKK-ba tovabbitva" ~ "Reclamation",
-      TRUE ~ "Other"
-    ), levels = c("Provide information", "Reclamation", "Other"))
-  ) %>%
-  ggplot(aes(CALL_DIFF)) +
-  geom_histogram(bins = 100) +
-  coord_cartesian(xlim = c(0, 200)) +
-  facet_grid(CASE_TYPE ~ ACTIVITY_EN) +
-  labs(
-    x = "Days after report",
-    y = "# of Calls",
-    title = "Number of Calls after Claim Reporting by Days Passed"
-  )
-```
 
 
-## 4.2. Claims Handling
 
-### 4.2.1. Claims Handling Interactions across Claims Lifecycle
+## 3.2. Claims Handling
+
+### 3.2.1. Claims Handling Interactions across Claims Lifecycle
+
+Claim Handling Center commits most interactions after the first payment.
 
 ```{r, message=FALSE}
 # Genereate bins
@@ -617,7 +541,9 @@ by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
 ```
 
 
-### 4.2.2. Claims Handling Interactions across Claims Lifecycle by Process Branch
+### 3.2.2. Claims Handling Interactions across Claims Lifecycle by Process Branch
+
+Most interactions happen on the standard branch after first payment.
 
 ```{r, message=FALSE}
 # Graph
@@ -647,11 +573,11 @@ by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>%
       )
 ```
 
-### 4.2.3. Distribution of Claims Handling Interactions between Report and Close Dates
+### 3.2.3. Distribution of Claims Handling Interactions between Report and Close Dates
 
-Most interactions happen between report and closing date. Breaking down this period by days passed after report shows that:
+Most interactions happen after first payment. Breaking down this period by days passed after report shows that:
 
-* most interactions take place 5 to 10 days after report
+* most interactions take place 5 to 10 days after first payment
 
 ```{r, message=FALSE}
 t_events_okk <- t_eventlog %>%
@@ -691,7 +617,7 @@ t_cutpoints %>%
   )
 ```
 
-There is no difference in peak point between process branches.
+Most interactions are committed by the expert team.
 
 ```{r, message=FALSE}
 t_cutpoints %>%
