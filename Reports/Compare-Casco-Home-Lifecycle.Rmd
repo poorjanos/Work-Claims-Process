@@ -1,7 +1,7 @@
 ---
-title: "CCC Activities across the Casco and Home Claim Management Lifecycle (A Business Case Candidate)"
+title: "CCC Activities across the Casco and Home Claim Management Lifecycle (A Business Case Outline)"
 author: "János Poór"
-date: 'April 24, 2019'
+date: 'April 26, 2019'
 output: rmdformats::readthedown
 ---
 
@@ -20,6 +20,7 @@ library(gridExtra)
 library(tidyr)
 library(scales)
 library(stringr)
+library(forcats)
 ```
 
 
@@ -96,27 +97,65 @@ t_casco_eventlog <- t_casco_eventlog %>% mutate_at(vars(EVENT_END), ymd_hms)
 t_casco_branches <- t_casco_branches %>% mutate_at(vars(CLAIM_REPORT_DATE, CLAIM_DECISION_DATE, CLAIM_CLOSE_DATE), ymd_hms)
 ```
 
+
+# Outline of a Business Case
+
+Most customer interactions during claim management are done through calls. There is a **clear distinction in the pattern of calls** across the claim management lifecycle for casco and home products. Business question: which pattern fits better the customer relations strategy of the company and what improvements can be done?
+
+The Background:
+
+* Managment of claim files trigger customer interactions for the Contact Center. These interactions are initiated and responded via different channels (call, online, email, etc).  
+* Process Analytics genereated for all managed home and casco claims in 2017-2018     
+	+ a database of interactions
+	+ a database of claim management lifecycles
+* Process Analytics delivers:   
+	+ an overview of the distribution of interactions across different channels
+	+ a **breakdown of the concentration of interactions** across claim management lifecycles  
+
+
+***
+
+
 # Contact Center Interactions 
 
-```{r, message=FALSE}
-t_home_eventlog %>% 
-  filter(ACTIVITY_TYPE == "KONTAKT CCC") %>% 
-  group_by(ACTIVITY_CHANNEL) %>% 
-  summarize(COUNT = length(CASE_ID),
-            COUNT_DISTINCT = length(unique(CASE_ID)),
-            INT_PER_CASE = length(CASE_ID)/length(unique(CASE_ID)))
-```
+The majority of interactions during claim management happens through calls. PWEB interacions of home products is considerable.
 
 ```{r, message=FALSE}
-t_casco_eventlog %>% 
+int_casco <- t_casco_eventlog %>% 
   filter(ACTIVITY_TYPE == "KONTAKT CCC") %>% 
   group_by(ACTIVITY_CHANNEL) %>% 
-  summarize(COUNT = length(CASE_ID),
-            COUNT_DISTINCT = length(unique(CASE_ID)),
-            INT_PER_CASE = length(CASE_ID)/length(unique(CASE_ID)))
+  summarize(TOTAL_INTERACTIONS = length(CASE_ID),
+            DISTINCT_REQUESTS = length(unique(CASE_ID)),
+            INTERACTION_PER_REQUEST = length(CASE_ID)/length(unique(CASE_ID))) %>% 
+  ungroup() %>% 
+  mutate(PRODUCT_LINE = "CASCO")
+
+  
+int_home <- t_home_eventlog %>% 
+  filter(ACTIVITY_TYPE == "KONTAKT CCC") %>% 
+  group_by(ACTIVITY_CHANNEL) %>% 
+  summarize(TOTAL_INTERACTIONS = length(CASE_ID),
+            DISTINCT_REQUESTS = length(unique(CASE_ID)),
+            INTERACTION_PER_REQUEST = length(CASE_ID)/length(unique(CASE_ID))) %>% 
+  ungroup() %>% 
+  mutate(PRODUCT_LINE = "HOME")
+  
+bind_rows(int_casco, int_home) %>% 
+              tidyr::gather(-ACTIVITY_CHANNEL, -PRODUCT_LINE, key = METRIC, value = VALUE) %>%
+  mutate(METRIC = factor(METRIC,levels = c("TOTAL_INTERACTIONS", "DISTINCT_REQUESTS", "INTERACTION_PER_REQUEST"))) %>% 
+  ggplot(aes(x = ACTIVITY_CHANNEL, y = VALUE)) +
+    geom_bar(stat = "identity") +
+    theme(strip.text.y = element_text(angle = 0)) +
+    facet_grid(METRIC~PRODUCT_LINE, scales = "free") +
+    labs(
+        x = "Interaction channel",
+        y = "Counts",
+        title = "Contact Center Interaction Types \nacross Casco and Home Claim Files (2017-2018)"
+      )
+
 ```
 
-```{r, message=FALSE}
+```{r, message=FALSE, eval = FALSE}
 # Casco lifecycles ######################################################################
 # Define lifecycle cutpoints
 t_casco_cutpoints_long <- t_casco_cutpoints %>%
@@ -164,7 +203,7 @@ by_case_id_casco_ccc <- t_casco_events_ccc %>%
 ```
 
 
-```{r, message=FALSE}
+```{r, message=FALSE, eval=FALSE}
 # Home lifecycles ######################################################################
 # Define lifecycle cutpoints
 t_home_cutpoints_long <- t_home_cutpoints %>%
@@ -212,33 +251,37 @@ by_case_id_home_ccc <- t_home_events_ccc %>%
   mutate(BINS = map2(data, .$CASE_ID, ~create_bins_home_2(df = .x, case_id = .y)))
 ```
 
-```{r, message=FALSE}
+```{r, message=FALSE, eval=FALSE}
 # Merge
-casco <- by_case_id_casco_ccc %>% select(CASE_ID, CASE_TYPE, ACTIVITY_CHANNEL, data, BINS) %>% unnest() %>% 
+casco <- by_case_id_casco_ccc %>%
+  select(CASE_ID, CASE_TYPE, ACTIVITY_CHANNEL, data, BINS) %>%
+  unnest() %>%
   mutate(
-    PERIOD = case_when(
-      is.na(BINS) ~ '1_BEFORE_REPORT',
-      BINS == 'REPORT_LOWERBOUND' ~ '2_ON_REPORT',
-      BINS == 'REPORT_UPPERBOUND' ~ '3_BETWEEN_REPORT_CLOSE',
-      BINS == 'CLOSE_LOWERBOUND' ~ '4_ON_CLOSE',
-      BINS == 'CLOSE_UPPERBOUND' ~ '5_AFTER_CLOSE'
-    ),
-    PRODUCT_LINE = 'CASCO',
+    PERIOD = factor(case_when(
+                      is.na(BINS) ~ "BEFORE REPORT",
+                      BINS == "REPORT_LOWERBOUND" ~ "ON REPORT",
+                      BINS == "REPORT_UPPERBOUND" ~ "BETWEEN REPORT & CLOSE",
+                      BINS == "CLOSE_LOWERBOUND" ~ "ON CLOSE",
+                      BINS == "CLOSE_UPPERBOUND" ~ "AFTER CLOSE"
+                            ),
+              levels = c("BEFORE REPORT", "ON REPORT", "BETWEEN REPORT & CLOSE", "ON CLOSE", "AFTER CLOSE")),
+    PRODUCT_LINE = "CASCO",
     CASE_TYPE = case_when(
-      CASE_TYPE == 'ALTERNATIVE' ~ 'ALTER/SIMPLE',
+      CASE_TYPE == "ALTERNATIVE" ~ "ALTER/SIMPLE",
       TRUE ~ CASE_TYPE
     )
   )
 
 home <- by_case_id_home_ccc %>% select(CASE_ID, CASE_TYPE, ACTIVITY_CHANNEL, data, BINS) %>% unnest() %>% 
   mutate(
-    PERIOD = case_when(
-      is.na(BINS) ~ '1_BEFORE_REPORT',
-      BINS == 'REPORT_LOWERBOUND' ~ '2_ON_REPORT',
-      BINS == 'REPORT_UPPERBOUND' ~ '3_BETWEEN_REPORT_CLOSE',
-      BINS == 'CLOSE_LOWERBOUND' ~ '4_ON_CLOSE',
-      BINS == 'CLOSE_UPPERBOUND' ~ '5_AFTER_CLOSE'
-    ),
+    PERIOD = factor(case_when(
+                      is.na(BINS) ~ "BEFORE REPORT",
+                      BINS == "REPORT_LOWERBOUND" ~ "ON REPORT",
+                      BINS == "REPORT_UPPERBOUND" ~ "BETWEEN REPORT & CLOSE",
+                      BINS == "CLOSE_LOWERBOUND" ~ "ON CLOSE",
+                      BINS == "CLOSE_UPPERBOUND" ~ "AFTER CLOSE"
+                            ),
+              levels = c("BEFORE REPORT", "ON REPORT", "BETWEEN REPORT & CLOSE", "ON CLOSE", "AFTER CLOSE")),
     PRODUCT_LINE = 'HOME',
     CASE_TYPE = case_when(
       CASE_TYPE == 'Simple' ~ 'ALTER/SIMPLE',
@@ -255,15 +298,44 @@ write.csv(t_lifecycles,
           row.names = FALSE)
 ```
 
-# Comparison of Incoming Calls across the Claim Management Lifecycle
+***
+
+
+# Comparison of Contact Center Interactions across the Claim Management Lifecycle
+
+For all interaction channels concentration of acitivities are broken down across the milestones of claim management.
+The two major lifecycle milestones are:  
+
+* Date of reporting the claim  
+* Date of closing the claim  
+
+The two cutpoints yield five lifecylcle sequences:  
+
+* Before reporting  
+* The day of rerporting  
+* Between reporting and closing  
+* The day of closing  
+* After closing  
+
+
+The clearest difference in patterns is that:  
+
+* most calls for casco products are done between report and closing 
+* while for home products most calls are done on the day of reporting  
+
+
+> This suggests that for home products calls are mostly reporting calls while for casco produts they are interactions generated by the process of claim file management itself.
 
 ```{r, message=FALSE}
 # Load from local cache
-t_lifecycles <- read.csv(here::here("Data", "t_lifecycles_home_casco.csv"), stringsAsFactors = FALSE)
+t_lifecycles <- read.csv(here::here("Data", "t_lifecycles_home_casco.csv"), stringsAsFactors = FALSE) %>% 
+  mutate(PERIOD = factor(PERIOD, levels = c("BEFORE REPORT", "ON REPORT", "BETWEEN REPORT & CLOSE", "ON CLOSE", "AFTER CLOSE")))
+```
 
+```{r, message=FALSE}
 # Graph
 t_lifecycles %>% 
-group_by(PRODUCT_LINE, PERIOD) %>%
+group_by(PRODUCT_LINE, PERIOD, ACTIVITY_CHANNEL) %>%
   summarize(N_OF_CALLS = n()) %>%
   ungroup() %>%
   group_by(PRODUCT_LINE) %>% 
@@ -273,34 +345,71 @@ group_by(PRODUCT_LINE, PERIOD) %>%
     geom_bar(stat = "identity") +
     scale_y_continuous(labels = percent) +
     theme(axis.text.x = element_text(angle = 90)) +
-    facet_grid(PRODUCT_LINE~.) + 
+    facet_grid(PRODUCT_LINE~ACTIVITY_CHANNEL) + 
     labs(
-        x = "Lifecycle",
-        y = "# of Calls",
-        title = "Number of Calls across Claim File Lifecycle"
+        x = "Phase of Claim Management Lifecycle",
+        y = "# of Interactions",
+        title = "Distriubution of Contact Center Interactions \nacross the Claim Management Lifecycle"
       )
 ```
 
+***
 
-# Comparison of Incomoing Calls across the Claim Management Lifecycle by Process Branch
+
+# Comparison of Contact Center Interactions across the Claim Management Lifecycle by Process Branch
+
+## Casco
+
+The close-up on process branches of casco shows that most calls are generated by the exception flow between report and closing that  suggests that these calls are done for claims that are off the happyflow of claim management. 
 
 ```{r, message=FALSE}
 # Graph
 t_lifecycles %>% 
-group_by(PRODUCT_LINE, PERIOD, CASE_TYPE) %>%
+filter(PRODUCT_LINE == "CASCO") %>% 
+mutate(CASE_TYPE = factor(CASE_TYPE, levels = c('ALTER/SIMPLE', 'STANDARD', 'EXCEPTION'))) %>% 
+group_by(PERIOD, CASE_TYPE, ACTIVITY_CHANNEL) %>%
   summarize(N_OF_CALLS = n()) %>%
   ungroup() %>%
-  group_by(PRODUCT_LINE, CASE_TYPE) %>% 
+  group_by(CASE_TYPE) %>% 
   mutate(RATIO = N_OF_CALLS/sum(N_OF_CALLS)) %>% 
   ungroup() %>% 
   ggplot(aes(x = PERIOD, y = RATIO)) +
     geom_bar(stat = "identity") +
     scale_y_continuous(labels = percent) +
-    theme(axis.text.x = element_text(angle = 90)) +
-    facet_grid(PRODUCT_LINE~CASE_TYPE) + 
+    theme(axis.text.x = element_text(angle = 90),
+          strip.text.y = element_text(angle = 0)) +
+    facet_grid(CASE_TYPE~ACTIVITY_CHANNEL) + 
     labs(
         x = "Lifecycle",
         y = "# of Calls",
-        title = "Number of Calls across Claim File Lifecycle"
+        title = "Casco Interactions by Process Branch across Claim File Lifecycle"
+      )
+```
+
+## Home
+
+For home products most calls are done on report day for both the standard and the exception flow of the process that suggests that these calls are initial claim reports by customers.
+
+```{r, message=FALSE}
+# Graph
+t_lifecycles %>% 
+filter(PRODUCT_LINE == "HOME") %>% 
+mutate(CASE_TYPE = factor(CASE_TYPE, levels = c('ALTER/SIMPLE', 'STANDARD', 'EXCEPTION'))) %>% 
+group_by(PERIOD, CASE_TYPE, ACTIVITY_CHANNEL) %>%
+  summarize(N_OF_CALLS = n()) %>%
+  ungroup() %>%
+  group_by(CASE_TYPE) %>% 
+  mutate(RATIO = N_OF_CALLS/sum(N_OF_CALLS)) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = PERIOD, y = RATIO)) +
+    geom_bar(stat = "identity") +
+    scale_y_continuous(labels = percent) +
+    theme(axis.text.x = element_text(angle = 90),
+          strip.text.y = element_text(angle = 0)) +
+    facet_grid(CASE_TYPE~ACTIVITY_CHANNEL) + 
+    labs(
+        x = "Lifecycle",
+        y = "# of Calls",
+        title = "Home Interactions by Process Branch across Claim File Lifecycle"
       )
 ```
