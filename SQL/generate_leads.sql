@@ -116,7 +116,7 @@ ADD
 INFO_CALL char(2),
 COMPLAIN_CALL char(2)
 );
-COMMIT
+COMMIT;
 
 
 UPDATE   t_casco_sample_normal_outlier_2018 a
@@ -130,7 +130,7 @@ COMMIT;
 
 
 UPDATE   t_casco_sample_normal_outlier_2018 a
-   SET   info_call = 'Y'
+   SET   complain_call = 'Y'
  WHERE   EXISTS
             (SELECT   1
                FROM   t_call_times b
@@ -145,7 +145,12 @@ COMMIT;
 SELECT   *
   FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK
   where case_id in (select case_id from t_casco_sample_normal_outlier_2018)
+  and activity_type <> 'KONTAKT CCC'
   order by case_id, event_end;
   
   
-select * from t_call_times;
+SELECT   *
+  FROM   t_casco_sample_normal_outlier_2018
+ WHERE   complain_call IS NOT NULL;
+
+
