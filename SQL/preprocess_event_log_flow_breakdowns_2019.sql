@@ -56,10 +56,8 @@ AS
                     AND EXISTS
                           (SELECT   1
                              FROM   mesterr.export_pa_wflog3 b
-                            WHERE   REGEXP_LIKE (f_paid, 'K-201[78]/.*')
-                                    AND hun1 IN
-                                             ('FKR 46 Velemenyezett es fuggo ',
-                                              'FKR 25 Fuggo ')
+                            WHERE   REGEXP_LIKE (f_paid, 'K-201[789]/.*')
+                                    AND (hun1 like 'FKR 46%' or hun1 like 'FKR 25%')
                                     AND a.f_paid = b.f_paid)
                THEN
                   'EXCEPTION'
@@ -69,7 +67,8 @@ AS
                AS case_type,
             attrib0eng AS ccc_contact_type
      FROM   mesterr.export_pa_wflog3 a
-    WHERE   REGEXP_LIKE (f_paid, 'K-201[78]/.*') AND hun1 IS NOT NULL;
+    WHERE   REGEXP_LIKE (f_paid, 'K-201[789]/.*') AND hun1 IS NOT NULL
+    and product_code like '218%';
 
 COMMIT;
 
@@ -98,7 +97,7 @@ CREATE TABLE T_CLAIMS_MILESTONES_2019
 AS
      SELECT   case_id, case_type, MIN (event_end) AS claim_report_date
        FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK_2019
-      WHERE   activity_hu = 'FKR 01 Elozetesen bejelentett '
+      WHERE   activity_hu like 'FKR 01%'
    GROUP BY   case_id, case_type;
 
 COMMIT;
@@ -120,10 +119,7 @@ UPDATE   T_CLAIMS_MILESTONES_2019 a
    SET   claim_close_date =
             (SELECT   MAX (event_end)
                FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK_2019 b
-              WHERE   activity_hu IN
-                            ('FKR 22 Kifizetes utan lezarhato ',
-                             'FKR 30 Harom honapig fuggo ',
-                             'FKR 06 Lezart ')
+              WHERE   (activity_hu like 'FKR 22%' or activity_hu like 'FKR 30%' or activity_hu like 'FKR 06%')
                       AND a.case_id = b.case_id);
 
 
@@ -132,10 +128,7 @@ UPDATE   T_CLAIMS_MILESTONES_2019 a
    SET   claim_decision_date =
             (SELECT   MIN (event_end)
                FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK_2019 b
-              WHERE   activity_hu IN
-                            ('FKR 49 Velemenyezett es kifizetheto ',
-                             'FKR 46 Velemenyezett es fuggo ',
-                             'FKR 25 Fuggo ')
+              WHERE   (activity_hu like 'FKR 49%' or activity_hu like 'FKR 46%' or activity_hu like 'FKR 25%')
                       AND a.case_id = b.case_id);
 
 COMMIT;
