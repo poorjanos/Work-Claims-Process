@@ -85,7 +85,6 @@ Outline of the main conclusions of the analysis of Casco claims process branches
 * Process branches  
 	+ Proportion of alternative (STP) claim management is minimal
 	+ Proporiton of standard (happyflow) and exception (pending) flow is about 50-50%
-	+ **UPDATE 2019** Throughput time have improved from 65 days (2018) 45 days (2019) - biggest improvement on exception flow
 * Interactions  
 	+ Contact Center: less than 50% of cases have Contact Center interactions
 	+ Those cases that have Contact Center interactions have on average 4
@@ -103,40 +102,40 @@ Outline of the main conclusions of the analysis of Casco claims process branches
 
 # 2. Overview of Casco Claims
 
-## 2.1. Monthly Volume and Throughput Time of Reported Casco Claims
+## 2.1. Monthly Volume and Throughput Time of Closed Casco Claims
 
-Dataset contains 12K reported and closed Casco claims that arrived between 2017/01 and 2018/06. Monthly fluctuation reflects seasonal peaks in summer months.
+Dataset contains 18K reported and closed Casco claims that arrived between 2017/01 and 2019/03. Volume and throughput computations are done for the Jul 2017 - Mar 2019 period to correct for pending cases at the begining and end of the timeline. Monthly fluctuation reflects seasonal peaks in summer months.
 
 ```{r, message=FALSE}
 p1 <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2019-04-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
-  group_by(CLAIM_REPORT_MONTH) %>%
+  filter(CLAIM_CLOSE_DATE >= as.Date("2017-07-01") & CLAIM_CLOSE_DATE < as.Date("2019-04-01")) %>%
+  mutate(CLAIM_CLOSE_MONTH = lubridate::floor_date(CLAIM_CLOSE_DATE, unit = "month")) %>%
+  group_by(CLAIM_CLOSE_MONTH) %>%
   summarize(COUNT_REPORTED_CLAIMS = n()) %>%
   ungroup() %>%
-  ggplot(aes(x = CLAIM_REPORT_MONTH, y = COUNT_REPORTED_CLAIMS)) +
+  ggplot(aes(x = CLAIM_CLOSE_MONTH, y = COUNT_REPORTED_CLAIMS)) +
   geom_line() +
   labs(
     x = "Month",
-    y = "# of Reported Casco Claims",
-    title = "Number of Reported Casco Claims per Month)"
+    y = "# of Closed Casco Claims",
+    title = "Number of Closed Casco Claims per Month"
   )
 
 p2 <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2019-04-01")) %>%
+  filter(CLAIM_CLOSE_DATE >= as.Date("2017-07-01") & CLAIM_CLOSE_DATE < as.Date("2019-04-01")) %>%
   mutate(
-    CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month"),
+    CLAIM_CLOSE_MONTH = lubridate::floor_date(CLAIM_CLOSE_DATE, unit = "month"),
     THROUGHPUT_TIME = difftime(CLAIM_CLOSE_DATE, CLAIM_REPORT_DATE, units = "days")
   ) %>%
-  group_by(CLAIM_REPORT_MONTH) %>%
+  group_by(CLAIM_CLOSE_MONTH) %>%
   summarize(AVG_THROUGHPUT = mean(THROUGHPUT_TIME)) %>%
   ungroup() %>%
-  ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_THROUGHPUT)) +
+  ggplot(aes(x = CLAIM_CLOSE_MONTH, y = AVG_THROUGHPUT)) +
   geom_line() +
   labs(
     x = "Month",
     y = "Throughput Time (days)",
-    title = "Throughput Time Reported Casco Claims per Month"
+    title = "Throughput Time of Closed Casco Claims per Month"
   )
 
 grid.arrange(p1, p2, nrow = 2)
@@ -153,40 +152,40 @@ Process has three main branches:
 
 ```{r, message=FALSE}
 p3 <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2019-04-01")) %>%
-  mutate(CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month")) %>%
-  group_by(CLAIM_REPORT_MONTH, CASE_TYPE) %>%
+  filter(CLAIM_CLOSE_DATE >= as.Date("2017-07-01") & CLAIM_CLOSE_DATE < as.Date("2019-04-01")) %>%
+  mutate(CLAIM_CLOSE_MONTH = lubridate::floor_date(CLAIM_CLOSE_DATE, unit = "month")) %>%
+  group_by(CLAIM_CLOSE_MONTH, CASE_TYPE) %>%
   summarize(COUNT_REPORTED_CLAIMS = n()) %>%
   ungroup() %>%
   mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('ALTERNATIVE','STANDARD','EXCEPTION'))) %>% 
-  ggplot(aes(x = CLAIM_REPORT_MONTH, y = COUNT_REPORTED_CLAIMS)) +
+  ggplot(aes(x = CLAIM_CLOSE_MONTH, y = COUNT_REPORTED_CLAIMS)) +
   geom_line() +
   theme(axis.text.x = element_text(angle = 90)) +
   facet_wrap(~ CASE_TYPE) +
   labs(
     x = "Month",
-    y = "# of Reported Casco Claims",
-    title = "Number of Reported Casco Claims per Month"
+    y = "# of Closed Casco Claims",
+    title = "Number of Closed Casco Claims per Month"
   )
 
 p4 <- t_branches %>%
-  filter(CLAIM_REPORT_DATE < as.Date("2019-04-01")) %>%
+  filter(CLAIM_CLOSE_DATE >= as.Date("2017-07-01") & CLAIM_CLOSE_DATE < as.Date("2019-04-01")) %>%
   mutate(
-    CLAIM_REPORT_MONTH = lubridate::floor_date(CLAIM_REPORT_DATE, unit = "month"),
+    CLAIM_CLOSE_MONTH = lubridate::floor_date(CLAIM_CLOSE_DATE, unit = "month"),
     THROUGHPUT_TIME = difftime(CLAIM_CLOSE_DATE, CLAIM_REPORT_DATE, units = "days")
   ) %>%
-  group_by(CLAIM_REPORT_MONTH, CASE_TYPE) %>%
+  group_by(CLAIM_CLOSE_MONTH, CASE_TYPE) %>%
   summarize(AVG_THROUGHPUT = mean(THROUGHPUT_TIME)) %>%
   ungroup() %>%
   mutate(CASE_TYPE = factor(CASE_TYPE, levels=c('ALTERNATIVE','STANDARD','EXCEPTION'))) %>% 
-  ggplot(aes(x = CLAIM_REPORT_MONTH, y = AVG_THROUGHPUT)) +
+  ggplot(aes(x = CLAIM_CLOSE_MONTH, y = AVG_THROUGHPUT)) +
   geom_line() +
   theme(axis.text.x = element_text(angle = 90)) +
   facet_wrap(~ CASE_TYPE) +
   labs(
     x = "Month",
     y = "Throughput Time (days)",
-    title = "Throughput Time Reported Casco Claims per Month"
+    title = "Throughput Time of Closed Casco Claims per Month"
   )
 
 grid.arrange(p3, p4, nrow = 2)
