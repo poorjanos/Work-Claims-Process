@@ -1,0 +1,177 @@
+---
+title: "Casco Claims: New Branch Lead Times and Interaction Counts"
+author: "János Poór"
+date: "`r Sys.Date()`"
+output: rmdformats::readthedown
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+```{r, message = FALSE, echo = TRUE, include = FALSE}
+library(config)
+library(dplyr)
+library(ggplot2)
+library(purrr)
+library(lubridate)
+library(gridExtra)
+library(tidyr)
+library(scales)
+library(stringr)
+library(xlsx)
+```
+
+
+```{r, include=FALSE}
+# Data Extraction #######################################################################
+
+# Set JAVA_HOME, set max. memory, and load rJava library
+Sys.setenv(JAVA_HOME = "C:\\Program Files\\Java\\jre1.8.0_171")
+options(java.parameters = "-Xmx2g")
+library(rJava)
+
+# Output Java version
+.jinit()
+print(.jcall("java/lang/System", "S", "getProperty", "java.version"))
+
+# Load RJDBC library
+library(RJDBC)
+
+# Get credentials
+datamnr <-
+  config::get("datamnr", file = "C:\\Users\\PoorJ\\Projects\\config.yml")
+
+# Create connection driver
+jdbcDriver <-
+  JDBC(driverClass = "oracle.jdbc.OracleDriver", classPath = "C:\\Users\\PoorJ\\Desktop\\ojdbc7.jar")
+
+# Open connection: kontakt
+jdbcConnection <-
+  dbConnect(
+    jdbcDriver,
+    url = datamnr$server,
+    user = datamnr$uid,
+    password = datamnr$pwd
+  )
+
+# Fetch data
+query_branches <-
+"SELECT * FROM T_CLAIMS_MILESTONES_2019_newbranch"
+
+t_branches <- dbGetQuery(jdbcConnection, query_branches)
+
+
+query_eventlog <-
+"SELECT * FROM T_CLAIMS_PA_OUTPUT_CCC_OKK_2019_newbranch where activity_type = 'KONTAKT OKK'
+and case_id in (select distinct case_id from T_CLAIMS_MILESTONES_2019_newbranch)"
+
+t_eventlog <- dbGetQuery(jdbcConnection, query_eventlog)
+
+
+# Close db connection: kontakt
+dbDisconnect(jdbcConnection)
+
+
+# Transform data
+t_eventlog <- t_eventlog %>% mutate_at(vars(EVENT_END), ymd_hms)
+t_branches <- t_branches %>% mutate_at(vars(REPORT_DATE, LB_CHECK_DATE, LB_DECISION_DATE, CLOSE_DATE), ymd_hms)
+```
+
+
+
+## 5.2. Claims Handling
+
+### 5.2.1. Claims Handling Interactions across Claims Lifecycle
+
+```{r, message=FALSE}
+# Define lifecycle cutpoints
+t_cutpoints_long <- t_branches %>%
+  select(CASE_ID, CASE_TYPE, REPORT_DATE, LB_CHECK_DATE, LB_DECISION_DATE, CLOSE_DATE) %>% 
+  tidyr::gather(-CASE_ID, -CASE_TYPE, key = CUTPOINT, value = CUTDATE) %>%
+  arrange(CASE_ID, CUTPOINT) %>% 
+  filter(!is.na(CUTDATE))
+
+
+# Org specific event seqs
+t_events_okk <- t_eventlog %>%
+  filter(
+        CASE_ID %in% t_cutpoints_long$CASE_ID &
+        ACTIVITY_TYPE == "KONTAKT OKK") %>%
+  select(CASE_ID, CASE_TYPE, EVENT_END)
+
+
+# Define Func to Compute Bins
+create_bins <- function(df, case_id) {
+  t_cutpoints_long_filtered <- t_cutpoints_long[t_cutpoints_long$CASE_ID == case_id, ] %>% arrange(CUTDATE)
+  as.character(cut(df$EVENT_END,
+    breaks = c(t_cutpoints_long_filtered$CUTDATE, Inf),
+    labels = t_cutpoints_long_filtered$CUTPOINT
+  ))
+}
+
+# Genereate bins
+by_case_id_okk <- t_events_okk %>%
+  group_by(CASE_ID, CASE_TYPE) %>%
+  nest() %>%
+  mutate(BINS = map2(data, .$CASE_ID, ~create_bins(df = .x, case_id = .y)))
+
+```
+
+
+```{r}
+t_output <- by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>% 
+  mutate(
+    PERIOD = case_when(
+      is.na(BINS) ~ '1_BEFORE_REPORT',
+      BINS == 'REPORT_DATE' ~ '2_REPORT_LBCHECK',
+      BINS == 'LB_CHECK_DATE' ~ '3_LBCHECK_LBDECISION',
+      BINS == 'LB_DECISION_DATE' ~ '4_LBDECISION_CLOSE',
+      BINS == 'CLOSE_DATE' ~ '5_AFTER_CLOSE'
+    )
+  )
+
+write.csv(
+  t_output,
+  here::here(
+    "Data",
+    "Interaction_counts_2017_2018.csv"
+  ),
+  row.names = FALSE
+)
+```
+
+
+
+```{r, message=FALSE}
+# Graph
+by_case_id_okk %>% select(CASE_ID, CASE_TYPE, data, BINS) %>% unnest() %>% 
+  mutate(
+    PERIOD = case_when(
+      is.na(BINS) ~ '1_BEFORE_REPORT',
+      BINS == 'REPORT_DATE' ~ '2_REPORT_LBCHECK',
+      BINS == 'LB_CHECK_DATE' ~ '3_LBCHECK_LBDECISION',
+      BINS == 'LB_DECISION_DATE' ~ '4_LBDECISION_CLOSE',
+      BINS == 'CLOSE_DATE' ~ '5_AFTER_CLOSE'
+    )
+  ) %>% 
+  group_by(CASE_TYPE, PERIOD) %>% 
+  summarize(N_OF_CALLS = n()) %>% 
+  ungroup() %>% 
+  ggplot(aes(x = PERIOD, y = N_OF_CALLS)) +
+    geom_bar(stat = "identity") +
+    theme(axis.text.x = element_text(angle = 90)) +
+    facet_grid(CASE_TYPE~.) +
+    labs(
+        x = "Lifecycle",
+        y = "# of Calls",
+        title = "Number of Calls across Claim File Lifecycle"
+      )
+```
+
+
+
+
+
+

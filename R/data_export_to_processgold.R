@@ -40,7 +40,8 @@ jdbcConnection <-
 query_claims_process <- "select distinct * from T_CLAIMS_PA_OUTPUT_CCC_OKK"
 t_claims_pa <- dbGetQuery(jdbcConnection, query_claims_process)
 
-query_claims_process_fair <- "select distinct * from T_CLAIMS_PA_OUTPUT_CCC_OKK where ACTIVITY_TYPE =  'FAIRKAR'"
+query_claims_process_fair <- "SELECT DISTINCT * FROM T_CLAIMS_PA_OUTPUT_CCC_OKK_2019_newbranch WHERE ACTIVITY_TYPE = 'FAIRKAR' AND case_id IN (SELECT   DISTINCT case_id FROM T_CLAIMS_MILESTONES_2019_newbranch)"
+
 t_claims_pa_fair <- dbGetQuery(jdbcConnection, query_claims_process_fair)
 
 query_claims_process_kontaktokk <- "select distinct * from T_CLAIMS_PA_OUTPUT_CCC_OKK where ACTIVITY_TYPE =  'KONTAKT OKK'"
