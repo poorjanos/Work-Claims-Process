@@ -110,11 +110,24 @@ CREATE INDEX milestones_idx
 ALTER TABLE T_CLAIMS_MILESTONES_2019_newbranch
 ADD
 (
+first_kontakt_interaction_date date,
 lb_check_date date, -- 08
 lb_decision_date date, -- 09, 33, 46, 47, 49, 
-close_date date --06, 22, 30, 98, 99
+close_date date, --06, 22, 30, 98, 99
+last_kontakt_interaction_date date
 );
 COMMIT;
+
+
+/* Add first_kontakt_interaction_date */
+UPDATE   T_CLAIMS_MILESTONES_2019_newbranch a
+   SET   first_kontakt_interaction_date =
+            (SELECT   MIN (event_end)
+               FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK_2019_newbranch b
+              WHERE   activity_type = 'KONTAKT OKK'
+                      AND a.case_id = b.case_id);
+COMMIT;
+
 
 
 /* Add lb_check_date */
@@ -148,6 +161,18 @@ UPDATE   T_CLAIMS_MILESTONES_2019_newbranch a
                       AND a.case_id = b.case_id);
 
 
+/* Add last_kontakt_interaction_date */
+UPDATE   T_CLAIMS_MILESTONES_2019_newbranch a
+   SET   last_kontakt_interaction_date =
+            (SELECT   MAX (event_end)
+               FROM   T_CLAIMS_PA_OUTPUT_CCC_OKK_2019_newbranch b
+              WHERE   activity_type = 'KONTAKT OKK'
+                      AND a.case_id = b.case_id);
+COMMIT;
+
+
+
+
 /* Delete cases with improper start or end */
 DELETE FROM   T_CLAIMS_MILESTONES_2019_newbranch
       WHERE      report_date IS NULL
@@ -174,12 +199,16 @@ ALTER TABLE T_CLAIMS_MILESTONES_2019_newbranch
 add
 (
 full_lead_time number,
+firstkontakt_to_report number,
 report_to_lbcheck number,
 lbcheck_to_lbdecision number,
-lbdecision_to_close number
+lbdecision_to_close number,
+close_to_lastkontakt number
 );
 COMMIT;
 
+UPDATE T_CLAIMS_MILESTONES_2019_newbranch
+set firstkontakt_to_report = report_date-first_kontakt_interaction_date;
 
 UPDATE T_CLAIMS_MILESTONES_2019_newbranch
 set full_lead_time = close_date-report_date;
@@ -192,5 +221,8 @@ set lbcheck_to_lbdecision = lb_decision_date-lb_check_date;
 
 UPDATE T_CLAIMS_MILESTONES_2019_newbranch
 set lbdecision_to_close = close_date-lb_decision_date;
+
+UPDATE T_CLAIMS_MILESTONES_2019_newbranch
+set close_to_lastkontakt = last_kontakt_interaction_date-close_date;
 
 COMMIT;
